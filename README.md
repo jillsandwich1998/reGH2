@@ -64,7 +64,7 @@ your administrator password:
 | Arch, CachyOS, Manjaro, ... | `vulkan-radeon` / `vulkan-intel` | `nvidia-utils` |
 | openSUSE | `libvulkan_radeon` / `libvulkan_intel` | the NVIDIA driver |
 
-Frame pacing is smoothest on **Linux 6.11 or newer**: the SDK's memory-protection queries are answered by the kernel directly there. Older kernels still work, with the previous, slower path (in our measurements it made a share of frames arrive late in pairs).
+Frame pacing: on Linux 6.11 or newer the SDK asks the kernel directly about memory protections; older kernels use a table the SDK keeps itself (measured here: late frames 7.9% with the old file-parsing path, 0.6% with the table, same as the kernel query).
 
 The game also needs a working audio server (PipeWire, PulseAudio or ALSA) and a display (Wayland or X11), as any desktop has.
 

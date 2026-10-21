@@ -1,0 +1,289 @@
+From 9daf5b7f124e6dd88218ac3d8176f2136b43175d Mon Sep 17 00:00:00 2001
+From: gh2 <x@x>
+Date: Wed, 21 Oct 2026 12:34:06 -0300
+Subject: [PATCH] Linux: keep page protections in a table on kernels without
+ PROCMAP_QUERY (REX_PROTECT_TABLE=force|verify|parse)
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+---
+ src/core/memory_posix.cpp | 202 +++++++++++++++++++++++++++++++++++---
+ 1 file changed, 189 insertions(+), 13 deletions(-)
+
+diff --git a/src/core/memory_posix.cpp b/src/core/memory_posix.cpp
+index 1c15c8a..f99e737 100644
+--- a/src/core/memory_posix.cpp
++++ b/src/core/memory_posix.cpp
+@@ -13,9 +13,12 @@
+ #include <cerrno>
+ #include <cstddef>
+ #include <cstdio>
++#include <cstdlib>
+ #include <cstring>
+ #include <fstream>
+ #include <functional>
++#include <map>
++#include <mutex>
+ #include <string>
+ 
+ #include <fcntl.h>
+@@ -225,17 +228,8 @@ static FastQuery QueryEntryFast(uintptr_t addr, LinuxMapEntry& out) {
+   return out.start < out.end ? FastQuery::kFound : FastQuery::kUnsupported;
+ }
+ 
+-// Find the mapping entry in /proc/self/maps that contains the given address
+-static bool FindEntryForAddress(void* address, LinuxMapEntry& out_entry) {
+-  const uintptr_t addr = reinterpret_cast<uintptr_t>(address);
+-  switch (QueryEntryFast(addr, out_entry)) {
+-    case FastQuery::kFound:
+-      return true;
+-    case FastQuery::kNotFound:
+-      return false;
+-    case FastQuery::kUnsupported:
+-      break;
+-  }
++// Parses /proc/self/maps for the mapping that contains the address.
++static bool FindEntryInProcFile(uintptr_t addr, LinuxMapEntry& out_entry) {
+   std::ifstream maps("/proc/self/maps");
+   if (!maps.is_open())
+     return false;
+@@ -252,6 +246,163 @@ static bool FindEntryForAddress(void* address, LinuxMapEntry& out_entry) {
+   return false;
+ }
+ 
++// Kernels older than 6.11 have no PROCMAP_QUERY, and parsing /proc/self/maps costs about a millisecond per query with the
++// thousands of mappings of a running game. Every change of protection in this process goes through the functions of this file,
++// so on such kernels the protections are kept here in an interval table instead. A range enters the table the first time it is
++// asked about (from one parse of the file, the kernel's own answer) and from then on is only changed by AllocFixed / Protect /
++// DeallocFixed / MapFileView / UnmapFileView. It is not used while the kernel can answer directly, except to check itself:
++//   REX_PROTECT_TABLE=force   use the table although the kernel could answer (simulates an older kernel)
++//   REX_PROTECT_TABLE=parse   parse the file every time (what an old kernel did before the table; for comparison)
++//   REX_PROTECT_TABLE=verify  answer from the kernel, compare with the table and log the differences
++enum class TableMode { kAuto, kForce, kVerify, kParse };
++
++static TableMode GetTableMode() {
++  static const TableMode mode = [] {
++    const char* v = std::getenv("REX_PROTECT_TABLE");
++    if (v && !std::strcmp(v, "force"))
++      return TableMode::kForce;
++    if (v && !std::strcmp(v, "verify"))
++      return TableMode::kVerify;
++    if (v && !std::strcmp(v, "parse"))
++      return TableMode::kParse;  // the pre-table behaviour of an old kernel, for measuring
++    return TableMode::kAuto;
++  }();
++  return mode;
++}
++
++static std::atomic<bool> g_table_active{false};
++static std::mutex g_table_mutex;
++struct TableRange {
++  uintptr_t end;
++  char perms[5];
++};
++static std::map<uintptr_t, TableRange> g_table;  // start -> range, never overlapping
++
++static void PermsFromProt(uint32_t prot, char perms[5]) {
++  perms[0] = (prot & PROT_READ) ? 'r' : '-';
++  perms[1] = (prot & PROT_WRITE) ? 'w' : '-';
++  perms[2] = (prot & PROT_EXEC) ? 'x' : '-';
++  perms[3] = 'p';
++  perms[4] = 0;
++}
++
++// Removes [begin, end) from the table, keeping the parts of the ranges that stick out of it. Needs the mutex.
++static void TableCarve(uintptr_t begin, uintptr_t end) {
++  auto it = g_table.upper_bound(begin);
++  if (it != g_table.begin())
++    --it;
++  while (it != g_table.end() && it->first < end) {
++    const uintptr_t rs = it->first;
++    const TableRange r = it->second;
++    if (r.end <= begin) {
++      ++it;
++      continue;
++    }
++    it = g_table.erase(it);
++    if (rs < begin)
++      g_table[rs] = TableRange{begin, {r.perms[0], r.perms[1], r.perms[2], r.perms[3], 0}};
++    if (r.end > end)
++      g_table[end] = r;
++    if (r.end > end)
++      break;
++  }
++}
++
++static void TableAssign(uintptr_t begin, size_t length, const char perms[5]) {
++  const uintptr_t page = static_cast<uintptr_t>(page_size());
++  const uintptr_t end = (begin + length + page - 1) & ~(page - 1);
++  begin &= ~(page - 1);
++  if (end <= begin)
++    return;
++  std::lock_guard<std::mutex> lock(g_table_mutex);
++  TableCarve(begin, end);
++  g_table[begin] = TableRange{end, {perms[0], perms[1], perms[2], perms[3], 0}};
++}
++
++static void TableForget(uintptr_t begin, size_t length) {
++  const uintptr_t page = static_cast<uintptr_t>(page_size());
++  const uintptr_t end = (begin + length + page - 1) & ~(page - 1);
++  begin &= ~(page - 1);
++  if (end <= begin)
++    return;
++  std::lock_guard<std::mutex> lock(g_table_mutex);
++  TableCarve(begin, end);
++}
++
++// The callers tell the table about a change only while it is in use (an empty table that nobody asks stays empty).
++static void NoteProtection(void* base, size_t length, uint32_t prot) {
++  if (!g_table_active.load(std::memory_order_acquire))
++    return;
++  char perms[5];
++  PermsFromProt(prot, perms);
++  TableAssign(reinterpret_cast<uintptr_t>(base), length, perms);
++}
++
++static void NoteUnmapped(void* base, size_t length) {
++  if (g_table_active.load(std::memory_order_acquire))
++    TableForget(reinterpret_cast<uintptr_t>(base), length);
++}
++
++static bool FindEntryInTable(uintptr_t addr, LinuxMapEntry& out_entry) {
++  std::lock_guard<std::mutex> lock(g_table_mutex);
++  g_table_active.store(true, std::memory_order_release);
++  auto find = [&]() {
++    auto it = g_table.upper_bound(addr);
++    if (it == g_table.begin())
++      return false;
++    --it;
++    if (addr >= it->second.end)
++      return false;
++    out_entry = LinuxMapEntry{};
++    out_entry.start = it->first;
++    out_entry.end = it->second.end;
++    std::memcpy(out_entry.perms, it->second.perms, sizeof(out_entry.perms));
++    return true;
++  };
++  if (find())
++    return true;
++  // not known yet: ask the kernel once, keep the whole mapping
++  LinuxMapEntry e;
++  if (!FindEntryInProcFile(addr, e))
++    return false;
++  TableCarve(e.start, e.end);
++  g_table[e.start] = TableRange{e.end, {e.perms[0], e.perms[1], e.perms[2], e.perms[3], 0}};
++  return find();
++}
++
++// Find the mapping entry that contains the given address
++static bool FindEntryForAddress(void* address, LinuxMapEntry& out_entry) {
++  const uintptr_t addr = reinterpret_cast<uintptr_t>(address);
++  const TableMode mode = GetTableMode();
++  if (mode == TableMode::kForce)
++    return FindEntryInTable(addr, out_entry);
++  if (mode == TableMode::kParse)
++    return FindEntryInProcFile(addr, out_entry);
++  switch (QueryEntryFast(addr, out_entry)) {
++    case FastQuery::kFound:
++      if (mode == TableMode::kVerify) {
++        static std::atomic<uint64_t> checks{0}, bad{0};
++        LinuxMapEntry t;
++        const bool have = FindEntryInTable(addr, t);
++        if (!have || std::memcmp(t.perms, out_entry.perms, 3) != 0) {
++          const uint64_t n = ++bad;
++          if (n <= 20)
++            REXSYS_ERROR("protect table mismatch at {:#x}: kernel {} table {}", addr,
++                         std::string(out_entry.perms, 3), have ? std::string(t.perms, 3) : "(none)");
++        }
++        const uint64_t c = ++checks;
++        if (c % 2000 == 0)
++          REXSYS_INFO("protect table: {} checks, {} mismatches", c, bad.load());
++      }
++      return true;
++    case FastQuery::kNotFound:
++      return false;
++    case FastQuery::kUnsupported:
++      break;
++  }
++  return FindEntryInTable(addr, out_entry);
++}
++
+ // Check if [base, base+length) is fully covered by existing mappings (no gaps)
+ static bool IsRangeFullyMapped(void* base_address, size_t length) {
+   if (!base_address || length == 0)
+@@ -359,6 +510,9 @@ void* AllocFixed(void* base_address, size_t length, AllocationType allocation_ty
+ 
+   void* result = mmap(base_address, length, prot_initial, flags, -1, 0);
+   if (result != MAP_FAILED) {
++#if REX_PLATFORM_LINUX
++    NoteProtection(result, length, static_cast<uint32_t>(prot_initial));
++#endif
+     return result;
+   }
+ #if defined(MAP_FIXED_NOREPLACE) && REX_PLATFORM_LINUX
+@@ -370,6 +524,7 @@ void* AllocFixed(void* base_address, size_t length, AllocationType allocation_ty
+     // Verify the entire range is mapped before using mprotect
+     if (IsRangeFullyMapped(base_address, length)) {
+       if (mprotect(base_address, length, static_cast<int>(prot_requested)) == 0) {
++        NoteProtection(base_address, length, prot_requested);
+         return base_address;
+       }
+     }
+@@ -386,13 +541,21 @@ bool DeallocFixed(void* base_address, size_t length, DeallocationType deallocati
+       if (mprotect(base_address, length, PROT_NONE) != 0) {
+         return false;
+       }
++#if REX_PLATFORM_LINUX
++      NoteProtection(base_address, length, PROT_NONE);
++#endif
+ #if defined(MADV_DONTNEED)
+       (void)madvise(base_address, length, MADV_DONTNEED);
+ #endif
+       return true;
+     }
+     case DeallocationType::kRelease: {
+-      return munmap(base_address, length) == 0;
++      const bool ok = munmap(base_address, length) == 0;
++#if REX_PLATFORM_LINUX
++      if (ok)
++        NoteUnmapped(base_address, length);
++#endif
++      return ok;
+     }
+     default:
+       // how we get here? :(
+@@ -433,6 +596,11 @@ bool Protect(void* base_address, size_t length, PageAccess access, PageAccess* o
+     REXSYS_ERROR("mprotect({}, 0x{:X}, {}) failed: {} ({})", base_address, length, prot,
+                  strerror(errno), errno);
+   }
++#if REX_PLATFORM_LINUX
++  else {
++    NoteProtection(base_address, length, prot);
++  }
++#endif
+   return ret == 0;
+ }
+ 
+@@ -591,11 +759,19 @@ void* MapFileView(FileMappingHandle handle, void* base_address, size_t length, P
+     return nullptr;
+   }
+ 
++#if REX_PLATFORM_LINUX
++  NoteProtection(result, length, prot);
++#endif
+   return result;
+ }
+ 
+ bool UnmapFileView(FileMappingHandle handle, void* base_address, size_t length) {
+-  return munmap(base_address, length) == 0;
++  const bool ok = munmap(base_address, length) == 0;
++#if REX_PLATFORM_LINUX
++  if (ok)
++    NoteUnmapped(base_address, length);
++#endif
++  return ok;
+ }
+ 
+ }  // namespace memory
+-- 
+2.56.0
+
