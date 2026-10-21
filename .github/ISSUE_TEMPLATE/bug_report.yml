@@ -32,7 +32,7 @@ body:
     id: report
     attributes:
       label: Problem report
-      description: Drag the report file (a .txt) into this box to attach it.
+      description: Drag the report file (a .txt) into this box to attach it, and the screenshot (a .png with the same name) if the game saved one.
     validations:
       required: true
   - type: input

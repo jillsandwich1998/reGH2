@@ -5,5 +5,10 @@
 
 #include <string>
 
-// Writes logs/report-<date>-<time>.txt next to the game. Returns the absolute path, or "" and sets `error`.
-std::string Gh2WriteProblemReport(std::string& error);
+// Provided by the menu: saves the game's own picture (not the desktop, not other windows) as a PNG at `path`; false if it cannot.
+using Gh2ScreenshotFn = bool (*)(const std::string& path);
+void Gh2SetScreenshotFn(Gh2ScreenshotFn fn);
+
+// Writes logs/report-<date>-<time>.txt next to the game (and, if asked, report-<date>-<time>.png with the game's picture).
+// Returns the absolute path of the text file, or "" and sets `error`. `screenshot_saved` tells whether the picture was written.
+std::string Gh2WriteProblemReport(std::string& error, bool with_screenshot = false, bool* screenshot_saved = nullptr);

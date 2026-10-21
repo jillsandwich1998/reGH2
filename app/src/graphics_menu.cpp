@@ -8,6 +8,7 @@
 
 #include "controllers.h"
 #include "fps_meter.h"
+#include "png_writer.h"
 #include "problem_report.h"
 #include "keyboard.h"
 
@@ -96,6 +97,25 @@ std::filesystem::path Gh2SaveDir() {
 std::string ShortenHome(std::string path) {
   if (const char* h = std::getenv("HOME"); h && *h && path.rfind(h, 0) == 0) path.replace(0, std::strlen(h), "~");
   return path;
+}
+
+// The game's own picture (the guest output, not the desktop and not other windows) as a PNG, for the problem report. The SDK
+// returns R8 G8 B8 X8; it is halved when wider than 1400 px so that a 2x internal resolution still fits what GitHub accepts.
+bool CaptureGamePng(const std::string& path) {
+  if (!g_presenter) return false;
+  rex::ui::RawImage img;
+  if (!g_presenter->CaptureGuestOutput(img) || !img.width || !img.height || img.data.empty()) return false;
+  const uint32_t f = img.width > 1400 ? 2 : 1, w = img.width / f, h = img.height / f;
+  std::vector<uint8_t> rgb(static_cast<size_t>(w) * h * 3);
+  for (uint32_t y = 0; y < h; ++y)
+    for (uint32_t x = 0; x < w; ++x)
+      for (int c = 0; c < 3; ++c) {
+        uint32_t sum = 0;
+        for (uint32_t dy = 0; dy < f; ++dy)
+          for (uint32_t dx = 0; dx < f; ++dx) sum += img.data[(y * f + dy) * img.stride + (x * f + dx) * 4 + c];
+        rgb[(static_cast<size_t>(y) * w + x) * 3 + c] = static_cast<uint8_t>(sum / (f * f));
+      }
+  return Gh2WritePngRgb(path, w, h, rgb.data());
 }
 
 // Opens a folder in the desktop's file manager (button of the menu). Runs in its own thread: system() waits for the helper.
@@ -532,12 +552,14 @@ class GraphicsDialog : public rex::ui::ImGuiDialog {
     Heading("SUPPORT");
     if (ImGui::Button("Save problem report")) {
       report_error_.clear();
-      report_path_ = Gh2WriteProblemReport(report_error_);
+      report_path_ = Gh2WriteProblemReport(report_error_, report_screenshot_, &report_shot_saved_);
     }
+    ImGui::SameLine();
+    ImGui::Checkbox("Include a screenshot of the game", &report_screenshot_);
     DimWrapped("If something goes wrong: make it happen again, then press this right away and attach the file to a GitHub issue, "
                "saying at what moment of the game it happens.");
     if (!report_path_.empty()) {
-      ImGui::TextWrapped("Saved: %s", report_path_.c_str());
+      ImGui::TextWrapped("Saved: %s%s", report_path_.c_str(), report_shot_saved_ ? "  (and a screenshot next to it)" : "");
       if (ImGui::Button("Open folder")) OpenFolder(std::filesystem::path(report_path_).parent_path().string());
     }
     if (!report_error_.empty()) ImGui::TextColored(kOrange, "%s", report_error_.c_str());
@@ -807,6 +829,7 @@ class GraphicsDialog : public rex::ui::ImGuiDialog {
   }
 
   std::string report_path_, report_error_;
+  bool report_screenshot_ = true, report_shot_saved_ = false;
   bool quit_confirm_ = false;
   std::chrono::steady_clock::time_point quit_opened_;
   std::filesystem::path config_path_;
@@ -924,6 +947,7 @@ void Gh2InstallGraphicsMenu(rex::Runtime* runtime, rex::ui::Presenter* presenter
   g_presenter = presenter;
   g_window = window;
   g_context = &context;
+  Gh2SetScreenshotFn(CaptureGamePng);
   ApplyPaintConfig();
 
   // Live changes (menu, F4 overlay, console) come from any thread: marshal onto the UI thread.
@@ -996,8 +1020,10 @@ void Gh2InstallGraphicsMenu(rex::Runtime* runtime, rex::ui::Presenter* presenter
     std::thread([delay] {
       std::this_thread::sleep_for(std::chrono::seconds(delay));
       std::string error;
-      const std::string path = Gh2WriteProblemReport(error);
-      fprintf(stderr, "TEST_REPORT %s %s\n", path.c_str(), error.c_str());
+      const bool shot = std::getenv("GH2_TEST_REPORT_SHOT") != nullptr;
+      bool saved = false;
+      const std::string path = Gh2WriteProblemReport(error, shot, &saved);
+      fprintf(stderr, "TEST_REPORT %s %s screenshot=%d\n", path.c_str(), error.c_str(), saved ? 1 : 0);
     }).detach();
   }
   new HintDialog(drawer);  // owns itself, closes after a few seconds

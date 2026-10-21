@@ -88,17 +88,29 @@ std::vector<fs::path> LogFiles(const fs::path& dir) {
 
 }  // namespace
 
-std::string Gh2WriteProblemReport(std::string& error) {
+namespace {
+Gh2ScreenshotFn g_screenshot_fn = nullptr;
+}
+void Gh2SetScreenshotFn(Gh2ScreenshotFn fn) { g_screenshot_fn = fn; }
+
+std::string Gh2WriteProblemReport(std::string& error, bool with_screenshot, bool* screenshot_saved) {
   const fs::path logs = "logs";
   std::error_code ec;
   fs::create_directories(logs, ec);
+  if (screenshot_saved) *screenshot_saved = false;
 
   std::ostringstream r;
   const std::time_t now = std::time(nullptr);
   char stamp[32], fname[64];
   std::strftime(stamp, sizeof(stamp), "%Y-%m-%d %H:%M:%S", std::localtime(&now));
   std::strftime(fname, sizeof(fname), "report-%Y%m%d-%H%M%S.txt", std::localtime(&now));
+  const fs::path png = logs / (std::string(fname).substr(0, std::string(fname).size() - 4) + ".png");
+  bool shot = false;
+  if (with_screenshot && g_screenshot_fn) shot = g_screenshot_fn(png.string());
+  if (screenshot_saved) *screenshot_saved = shot;
   r << "reGH2 problem report\nCreated: " << stamp << "\n";
+  r << "Screenshot: " << (shot ? png.filename().string() + " (the game's picture only, no desktop)"
+                              : with_screenshot ? std::string("could not be taken") : std::string("not requested")) << "\n";
   r << "Attach this file to a GitHub issue and say what you were doing when the problem happened.\n";
 
   r << Section("Install");

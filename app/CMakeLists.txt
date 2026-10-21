@@ -19,6 +19,7 @@ set(GH2_SOURCES
     src/keyboard.cpp
     src/fps_meter.cpp
     src/problem_report.cpp
+    src/png_writer.cpp
 )
 
 if(WIN32)

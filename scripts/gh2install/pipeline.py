@@ -515,6 +515,22 @@ class Installer:
                     patched += 1
         self.log("spin hints patched in %d files" % patched)
 
+    def build_info(self):
+        """How the game was compiled, for the install record and the problem reports: the compiler, whether it is the one inside
+        the AppImage, the options and the parallel jobs."""
+        def first_line(cmd):
+            try:
+                out = subprocess.run(cmd, capture_output=True, text=True, env=self.env()).stdout.strip().splitlines()
+                return out[0] if out else "?"
+            except OSError:
+                return "?"
+        appdir = os.environ.get("APPDIR")
+        return {"compiler": self.cxx, "compiler_version": first_line([self.cxx, "--version"]),
+                "bundled_toolchain": bool(appdir and self.cxx.startswith(appdir)),
+                "cmake": first_line(["cmake", "--version"]),
+                "options": "Release, -O2 -DNDEBUG, CMake toolchain file: %s" % (self.toolchain_file or "none"),
+                "parallel_jobs": getattr(self, "last_jobs", None)}
+
     def build(self, build_dir):
         out = os.path.join(build_dir, "out")
         cfg = ["cmake", "-S", build_dir, "-B", out, "-G", "Ninja", "-DCMAKE_BUILD_TYPE=Release",
@@ -525,6 +541,7 @@ class Installer:
         self.progress(0.42, "Configuring the build")
         self.run(cfg)
         jobs = job_count()
+        self.last_jobs = jobs
         self.log("building with %d parallel jobs" % jobs)
         step = re.compile(r"^\[(\d+)/(\d+)\]")
 
@@ -567,7 +584,8 @@ class Installer:
             replace_file(os.path.join(out, f), os.path.join(app, f))
         self.ensure_runtime()
         meta = {"version": __version__, "game_dir": game_dir, "xex_sha1": digest, "sdk": self.sdk,
-                "fingerprint": self.fingerprint(), "installed": time.strftime("%Y-%m-%d %H:%M:%S"), "seconds": round(time.time() - t0)}
+                "fingerprint": self.fingerprint(), "installed": time.strftime("%Y-%m-%d %H:%M:%S"), "seconds": round(time.time() - t0),
+                "build": self.build_info()}
         json.dump(meta, open(os.path.join(self.prefix, "install.json"), "w"), indent=1)
         self.make_shortcut()
         self.progress(1.0, "Done")
