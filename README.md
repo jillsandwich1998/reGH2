@@ -92,9 +92,7 @@ This is an unofficial project, not affiliated with or endorsed by Activision or 
 
 ## Tools for finding performance problems
 
-* **FPS counter:** F2 > GAME > *Show FPS counter*. It shows the frame rate of the game itself, measured inside the game, with the
-  1% low and a graph of the last 40 seconds. Overlays that hook the screen (such as MangoHud) only see the screen, which repeats
-  the last picture when the game is late, so they can show 60 while the game is slow. The counter costs a few points of GPU.
+* **FPS counter:** F2 > GAME > *Show FPS counter*.
 * **Slowdown log:** whenever the game itself runs below about 55 fps for a second, or one frame takes over 50 ms, a line with the
   time goes to `logs/perf.log` next to the game. The problem report includes it.
 * **Audio:** the audio buffers are the smallest that worked well on the test machine (about 27 ms in total). If you hear crackling,
