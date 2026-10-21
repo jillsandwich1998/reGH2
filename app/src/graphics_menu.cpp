@@ -98,6 +98,15 @@ std::string ShortenHome(std::string path) {
   return path;
 }
 
+// Opens a folder in the desktop's file manager (button of the menu). Runs in its own thread: system() waits for the helper.
+// The game runs with its own copy of the C++ runtime first on LD_LIBRARY_PATH; a system program started from here (the file
+// manager, which uses the system's newer libstdc++) must not inherit it or it dies on start without a word.
+void OpenFolder(const std::string& dir) {
+  std::thread([dir] {
+    std::system(("env -u LD_LIBRARY_PATH -u LD_PRELOAD xdg-open '" + dir + "' >/dev/null 2>&1").c_str());
+  }).detach();
+}
+
 std::string Get(const char* name) { return rex::cvar::GetFlagByName(name); }
 bool GetBool(const char* name) { return Get(name) == "true"; }
 int GetInt(const char* name, int fallback) {
@@ -517,10 +526,7 @@ class GraphicsDialog : public rex::ui::ImGuiDialog {
 
     Heading("SAVE GAME");
     const std::filesystem::path save_dir = Gh2SaveDir();
-    if (ImGui::Button("Open saves folder")) {
-      const std::string dir = save_dir.string();
-      std::thread([dir] { std::system(("xdg-open '" + dir + "' >/dev/null 2>&1").c_str()); }).detach();
-    }
+    if (ImGui::Button("Open saves folder")) OpenFolder(save_dir.string());
     ImGui::TextDisabled("%s", ShortenHome(save_dir.string()).c_str());
 
     Heading("SUPPORT");
@@ -532,10 +538,7 @@ class GraphicsDialog : public rex::ui::ImGuiDialog {
                "saying at what moment of the game it happens.");
     if (!report_path_.empty()) {
       ImGui::TextWrapped("Saved: %s", report_path_.c_str());
-      if (ImGui::Button("Open folder")) {
-        const std::string dir = std::filesystem::path(report_path_).parent_path().string();
-        std::thread([dir] { std::system(("xdg-open '" + dir + "' >/dev/null 2>&1").c_str()); }).detach();
-      }
+      if (ImGui::Button("Open folder")) OpenFolder(std::filesystem::path(report_path_).parent_path().string());
     }
     if (!report_error_.empty()) ImGui::TextColored(kOrange, "%s", report_error_.c_str());
 
@@ -974,6 +977,18 @@ void Gh2InstallGraphicsMenu(rex::Runtime* runtime, rex::ui::Presenter* presenter
         Set(item.substr(0, eq).c_str(), item.substr(eq + 1, at - eq - 1));
         fprintf(stderr, "TESTSET %s\n", item.c_str());
       }
+    }).detach();
+  }
+  if (const char* t = std::getenv("GH2_TEST_OPEN_SAVES")) {  // testing aid: what the "Open saves folder" button does, after N seconds
+    const int delay = std::max(1, std::atoi(t));
+    std::thread([delay] {
+      std::this_thread::sleep_for(std::chrono::seconds(delay));
+      if (const char* dirty = std::getenv("GH2_TEST_OPEN_SAVES_LIBS")) {  // as in the installed game: our own libstdc++ on the path
+        const char* old = std::getenv("LD_LIBRARY_PATH");
+        setenv("LD_LIBRARY_PATH", (std::string(dirty) + (old ? std::string(":") + old : "")).c_str(), 1);
+      }
+      OpenFolder(Gh2SaveDir().string());
+      fprintf(stderr, "TEST_OPEN_SAVES asked to open %s\n", Gh2SaveDir().c_str());
     }).detach();
   }
   if (const char* t = std::getenv("GH2_TEST_REPORT")) {  // testing aid: write a problem report after N seconds
