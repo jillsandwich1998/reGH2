@@ -16,6 +16,7 @@
 #include "controllers.h"
 #include "fps_meter.h"
 #include "keyboard.h"
+#include "zip_writer.h"
 
 namespace fs = std::filesystem;
 
@@ -111,7 +112,7 @@ std::string Gh2WriteProblemReport(std::string& error, bool with_screenshot, bool
   r << "reGH2 problem report\nCreated: " << stamp << "\n";
   r << "Screenshot: " << (shot ? png.filename().string() + " (the game's picture only, no desktop)"
                               : with_screenshot ? std::string("could not be taken") : std::string("not requested")) << "\n";
-  r << "Attach this file to a GitHub issue and say what you were doing when the problem happened.\n";
+  r << "Attach the .zip (it holds this file and the screenshot) to a GitHub issue and say what you were doing when the problem happened.\n";
 
   r << Section("Install");
   // The install record sits next to the game folder when installed by the launcher (prefix/install.json, game in prefix/app).
@@ -181,5 +182,11 @@ std::string Gh2WriteProblemReport(std::string& error, bool with_screenshot, bool
     return "";
   }
   f << text;
+  f.close();
+  // One file to attach: the report and, if it was taken, the screenshot.
+  std::vector<std::pair<std::string, std::string>> entries = {{out.filename().string(), out.string()}};
+  if (shot) entries.push_back({png.filename().string(), png.string()});
+  const fs::path zip = out.parent_path() / (out.stem().string() + ".zip");
+  if (Gh2WriteZip(zip.string(), entries)) return fs::absolute(zip, ec).string();
   return fs::absolute(out, ec).string();
 }

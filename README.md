@@ -35,7 +35,7 @@ reproduce and analyse the problem:
 
    The report is one text file with your system, how the game was compiled, the settings in use, the controllers, the game's frame
    rate and the end of its logs. In the game it can also save a screenshot (a PNG next to the report, with a tick box to turn it
-   off): only the game's own picture, never your desktop or other windows. Attach the PNG too. Your home folder is replaced by `~`; open the file and check it if you want before sharing it.
+   off): only the game's own picture, never your desktop or other windows. Both are packed into one `.zip` (`report-<date>.zip`): attach that. Your home folder is replaced by `~`; open the file and check it if you want before sharing it.
 4. Include your graphics card, its driver and your Linux distribution if the report cannot tell them (it usually can).
 
 ## Saves and uninstalling

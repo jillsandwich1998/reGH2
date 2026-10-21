@@ -323,7 +323,11 @@ class Installer:
         path = os.path.join(logs, time.strftime("report-%Y%m%d-%H%M%S.txt"))
         with open(path, "w") as f:
             f.write(text)
-        return path
+        import zipfile  # the same single file to attach as the report made inside the game
+        zip_path = path[:-4] + ".zip"
+        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
+            z.write(path, os.path.basename(path))
+        return zip_path
 
     def game_env(self):
         """Environment for the game process: its own libraries only, nothing inherited from the AppImage."""

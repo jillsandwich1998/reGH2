@@ -3,9 +3,7 @@
 #include <cstdio>
 #include <vector>
 
-namespace {
-
-uint32_t Crc32(const uint8_t* data, size_t n, uint32_t crc = 0) {
+uint32_t Gh2Crc32(const uint8_t* data, size_t n, uint32_t crc) {
   static uint32_t table[256];
   static bool ready = false;
   if (!ready) {
@@ -21,6 +19,8 @@ uint32_t Crc32(const uint8_t* data, size_t n, uint32_t crc = 0) {
   return ~crc;
 }
 
+namespace {
+
 void Put32(std::vector<uint8_t>& v, uint32_t x) {
   v.push_back(x >> 24);
   v.push_back(x >> 16);
@@ -34,7 +34,7 @@ bool Chunk(FILE* f, const char type[4], const std::vector<uint8_t>& data) {
   std::vector<uint8_t> body(type, type + 4);
   body.insert(body.end(), data.begin(), data.end());
   std::vector<uint8_t> tail;
-  Put32(tail, Crc32(body.data(), body.size()));
+  Put32(tail, Gh2Crc32(body.data(), body.size()));
   return fwrite(head.data(), 1, head.size(), f) == head.size() && fwrite(body.data(), 1, body.size(), f) == body.size() &&
          fwrite(tail.data(), 1, tail.size(), f) == tail.size();
 }
