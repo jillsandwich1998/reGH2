@@ -584,7 +584,6 @@ class Installer:
         if not meta:
             raise InstallError("the game is not installed yet")
         app = os.path.join(self.prefix, "app")
-        if not os.path.exists(os.path.join(app, "lib", "librexruntime.so")):
-            self.ensure_runtime()  # installed by an older version
+        self.ensure_runtime()  # cheap when nothing changed; brings the runtime of an older install up to date
         env = self.game_env()
         os.execve(os.path.join(app, "gh2"), [os.path.join(app, "gh2"), *extra_args], env)

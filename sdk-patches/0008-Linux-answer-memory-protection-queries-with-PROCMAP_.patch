@@ -1,0 +1,109 @@
+From 4c5167ec097fca20b6a6122afa0e33c202b4afd5 Mon Sep 17 00:00:00 2001
+From: gh2 <x@x>
+Date: Wed, 21 Oct 2026 00:14:43 -0300
+Subject: [PATCH] Linux: answer memory-protection queries with PROCMAP_QUERY
+ instead of parsing /proc/self/maps
+
+QueryProtect (and Protect, for the old protection) read and parsed all of /proc/self/maps on every call. The access-violation
+handler calls it once per write-watch fault, under the global critical region, so in heavy scenes the game's main thread spent
+about half of its working time there and frames came late in pairs. Linux 6.11 and newer answer the question directly with the
+PROCMAP_QUERY ioctl; older kernels keep the file parsing. Verified equal to the parse on ~6700 addresses (only the kernel's
+[vsyscall] page differs, which is never queried).
+---
+ src/core/memory_posix.cpp | 63 +++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 63 insertions(+)
+
+diff --git a/src/core/memory_posix.cpp b/src/core/memory_posix.cpp
+index 2d89e11..1c15c8a 100644
+--- a/src/core/memory_posix.cpp
++++ b/src/core/memory_posix.cpp
+@@ -9,6 +9,7 @@
+  * @modified    Tom Clay & Rien Gupta, 2026 - Adapted for ReXGlue runtime (POSIX + macOS)
+  */
+ 
++#include <atomic>
+ #include <cerrno>
+ #include <cstddef>
+ #include <cstdio>
+@@ -25,6 +26,7 @@
+ #include <mach/vm_region.h>
+ #endif  // REX_PLATFORM_MAC
+ 
++#include <sys/ioctl.h>
+ #include <sys/mman.h>
+ #include <sys/stat.h>
+ #include <unistd.h>
+@@ -170,9 +172,70 @@ static bool ParseProcMapsLine(const std::string& line, LinuxMapEntry& out) {
+   return out.start < out.end;
+ }
+ 
++// Linux 6.11 and newer answer "which mapping holds this address?" directly (the PROCMAP_QUERY ioctl on /proc/self/maps), in
++// logarithmic time and without any text. Reading and parsing all of /proc/self/maps for every query (the fallback below) is slow in
++// a process with thousands of mappings, and the access-violation handler asks once per write-watch fault while it holds the global
++// critical region, so every such fault stalled the thread that caused it (and any thread waiting for that region).
++// The structure is the kernel's `struct procmap_query` (linux/fs.h), copied so that older headers still build.
++struct ProcmapQueryAbi {
++  uint64_t size;
++  uint64_t query_flags;
++  uint64_t query_addr;
++  uint64_t vma_start;
++  uint64_t vma_end;
++  uint64_t vma_flags;
++  uint64_t vma_page_size;
++  uint64_t vma_offset;
++  uint64_t inode;
++  uint32_t dev_major;
++  uint32_t dev_minor;
++  uint32_t vma_name_size;
++  uint32_t build_id_size;
++  uint64_t vma_name_addr;
++  uint64_t build_id_addr;
++};
++static_assert(sizeof(ProcmapQueryAbi) == 104, "must match the kernel's struct procmap_query");
++constexpr unsigned long kProcmapQuery = _IOWR('f', 17, ProcmapQueryAbi);
++constexpr uint64_t kProcmapReadable = 0x01, kProcmapWritable = 0x02, kProcmapExecutable = 0x04, kProcmapShared = 0x08;
++
++enum class FastQuery { kFound, kNotFound, kUnsupported };
++
++static FastQuery QueryEntryFast(uintptr_t addr, LinuxMapEntry& out) {
++  static const int fd = open("/proc/self/maps", O_RDONLY | O_CLOEXEC);
++  static std::atomic<bool> unsupported{false};
++  if (fd < 0 || unsupported.load(std::memory_order_relaxed))
++    return FastQuery::kUnsupported;
++  ProcmapQueryAbi q = {};
++  q.size = sizeof(q);
++  q.query_addr = addr;  // query_flags 0: the mapping that contains addr, or ENOENT
++  if (ioctl(fd, kProcmapQuery, &q) != 0) {
++    if (errno == ENOENT)
++      return FastQuery::kNotFound;
++    if (errno == ENOTTY || errno == EINVAL || errno == ENOSYS)
++      unsupported.store(true, std::memory_order_relaxed);  // an older kernel: parse the file from now on
++    return FastQuery::kUnsupported;
++  }
++  out = LinuxMapEntry{};
++  out.start = static_cast<uintptr_t>(q.vma_start);
++  out.end = static_cast<uintptr_t>(q.vma_end);
++  out.perms[0] = (q.vma_flags & kProcmapReadable) ? 'r' : '-';
++  out.perms[1] = (q.vma_flags & kProcmapWritable) ? 'w' : '-';
++  out.perms[2] = (q.vma_flags & kProcmapExecutable) ? 'x' : '-';
++  out.perms[3] = (q.vma_flags & kProcmapShared) ? 's' : 'p';
++  return out.start < out.end ? FastQuery::kFound : FastQuery::kUnsupported;
++}
++
+ // Find the mapping entry in /proc/self/maps that contains the given address
+ static bool FindEntryForAddress(void* address, LinuxMapEntry& out_entry) {
+   const uintptr_t addr = reinterpret_cast<uintptr_t>(address);
++  switch (QueryEntryFast(addr, out_entry)) {
++    case FastQuery::kFound:
++      return true;
++    case FastQuery::kNotFound:
++      return false;
++    case FastQuery::kUnsupported:
++      break;
++  }
+   std::ifstream maps("/proc/self/maps");
+   if (!maps.is_open())
+     return false;
+-- 
+2.56.0
+
