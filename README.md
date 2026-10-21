@@ -17,7 +17,9 @@ recompiles the game on your computer from the disc image (.iso), the extracted g
 2. Press **Select folder...** and choose the folder that holds your game (the disc image, the extracted game, or the folder with `default.xex`; it is searched for inside), then **Install** (a few minutes: the game is compiled here).
 3. Press **PLAY**. In the game press **F2** for the options (graphics, display mode, controllers, keyboard, DLC, start-up, FPS counter) and to **Quit game** (it asks for confirmation).
 
-Command line: `reGH2-x86_64.AppImage install <iso|folder|default.xex>`, `... launch [game options]`, `... status`, `... doctor`, `... report`, `... saves`, `... uninstall`.
+Command line: `reGH2-x86_64.AppImage install <iso|folder|default.xex>`, `... launch [game options]`, `... status`, `... doctor`, `... report`, `... saves`, `... uninstall`, `... update`.
+
+**Updates.** When the launcher opens it looks on GitHub for a newer release (one HTTPS request to the GitHub API, nothing else is sent; a tick box at the bottom of the launcher turns it off, or set `GH2_NO_UPDATE_CHECK=1`). If there is one, a bar offers **Update now**: it downloads the new AppImage, checks it against the release's `SHA256SUMS.txt`, replaces the old one and restarts the launcher. Then **Update game** rebuilds your installed game with the new version from the game files it was built from (a few minutes; saves are kept). Nothing is updated without your click. `reGH2-x86_64.AppImage update` shows whether a newer version exists and `update --apply` downloads it. The checksum comes from the same release, so it detects a damaged download, not a tampered release.
 
 ## Testing and reporting problems
 

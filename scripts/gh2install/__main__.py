@@ -3,7 +3,7 @@ import os
 import sys
 
 from . import __version__
-from . import deps, shortcut
+from . import deps, shortcut, updater
 from .pipeline import Installer, InstallError, KNOWN_XEX
 
 
@@ -43,6 +43,8 @@ def main(argv=None):
     p.add_argument("--export", metavar="FOLDER", help="write a zip with the save game and achievements into FOLDER")
     sub.add_parser("report", help="save a problem report (system, settings, logs) to attach to a GitHub issue")
     sub.add_parser("doctor", help="check the system for a Vulkan driver and offer to install it")
+    p = sub.add_parser("update", help="look for a newer reGH2 on GitHub; with --apply, download it and replace this AppImage")
+    p.add_argument("--apply", action="store_true", help="download the newer version (checked against its SHA256SUMS.txt) and replace this AppImage")
     sub.add_parser("version")
     a, extra = ap.parse_known_args(argv)  # for `launch`, unknown options go to the game
     inst = Installer(a.prefix, a.sdk, a.cxx, a.toolchain_file, force=getattr(a, "force", False), desktop_icon=not getattr(a, "no_desktop_icon", False),
@@ -74,6 +76,24 @@ def main(argv=None):
             print(inst.write_report())
         elif a.cmd == "doctor":
             return doctor(ask=True)
+        elif a.cmd == "update":
+            try:
+                info = updater.latest()
+            except updater.UpdateError as e:
+                raise InstallError(str(e))
+            if not updater.is_newer(info):
+                print("reGH2 %s is the newest version." % __version__)
+            else:
+                print("reGH2 %s is available (this is %s): %s" % (info["version"], __version__, info["page"]))
+                if a.apply:
+                    try:
+                        path, replaced = updater.apply(info, progress=lambda f: print("\r[%3d%%] downloading" % (f * 100), end="", flush=True))
+                    except updater.UpdateError as e:
+                        raise InstallError(str(e))
+                    print("\nNew version: %s%s" % (path, "" if replaced else " (start it from there)"))
+                    print("Open it and press Update game to rebuild the installed game with the new version." if inst.status() else "")
+                else:
+                    print("Run with --apply to download it.")
         elif a.cmd == "launch":
             doctor(ask=sys.stdin.isatty())
             inst.launch(extra)

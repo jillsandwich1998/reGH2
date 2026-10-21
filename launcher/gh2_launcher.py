@@ -8,7 +8,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scripts"))
-from gh2install import __version__, deps, shortcut  # noqa: E402
+from gh2install import __version__, deps, shortcut, updater  # noqa: E402
 from gh2install.pipeline import InstallError, Installer, clean_env, default_prefix, find_game  # noqa: E402
 
 import native_dialog  # noqa: E402
@@ -28,6 +28,9 @@ class Launcher(tk.Tk):
         self._style()
         self._build()
         self.refresh()
+        self.update_info = None
+        if updater.check_enabled():
+            self.after(400, self.check_updates)
 
     # ---- look ---------------------------------------------------------------------------------------------------
     def _style(self):
@@ -52,6 +55,14 @@ class Launcher(tk.Tk):
         body = ttk.Frame(self, padding=16)
         body.pack(fill="both", expand=True)
 
+        self.update_panel = ttk.Frame(body, style="Panel.TFrame", padding=(16, 10))  # shown only when a newer version exists
+        self.update_text = ttk.Label(self.update_panel, text="", style="Head.TLabel")
+        self.update_text.pack(side="left")
+        self.update_btn = ttk.Button(self.update_panel, text="Update now", command=self.apply_update)
+        self.update_btn.pack(side="right")
+        ttk.Button(self.update_panel, text="What's new", command=lambda: self.open_folder(self.update_info["page"])).pack(
+            side="right", padx=8)
+
         self.state_panel = ttk.Frame(body, style="Panel.TFrame", padding=16)
         self.state_panel.pack(fill="x")
         self.state_head = ttk.Label(self.state_panel, text="", style="Head.TLabel")
@@ -72,6 +83,7 @@ class Launcher(tk.Tk):
         ttk.Button(row2, text="Export saves...", command=self.export_saves).pack(side="left", padx=12)
         self.uninstall_btn = ttk.Button(row2, text="Uninstall...", command=self.uninstall)
         self.uninstall_btn.pack(side="left")
+        self.rebuild_btn = ttk.Button(row2, text="Update game", command=self.rebuild_installed)  # shown when this version differs
 
         self.install_panel = ttk.Frame(body, style="Panel.TFrame", padding=16)
         self.install_panel.pack(fill="x", pady=(14, 0))
@@ -100,6 +112,9 @@ class Launcher(tk.Tk):
         self.log = tk.Text(body, height=8, bg="#120808", fg=DIM, insertbackground=TEXT, relief="flat", font=("Monospace", 9),
                            state="disabled")
         self.log.pack(fill="both", expand=True, pady=(14, 0))
+        self.check_var = tk.BooleanVar(value=updater.check_enabled())
+        ttk.Checkbutton(body, text="Look for a newer version when this window opens", variable=self.check_var,
+                        command=lambda: updater.set_check_enabled(self.check_var.get())).pack(anchor="w", pady=(8, 0))
 
     # ---- state --------------------------------------------------------------------------------------------------
     def installer(self, **kw):
@@ -112,7 +127,14 @@ class Launcher(tk.Tk):
             self.state_info.config(text="Installed %s from %s\nSettings are in the game: press F2." %
                                    (meta.get("installed", "?"), meta.get("game_dir", "?")))
             self.play_btn.state(["!disabled"])
+            if self.installer().game_outdated():
+                self.state_info.config(text=self.state_info.cget("text") + "\nThis version of reGH2 has changes the installed game "
+                                       "does not have yet: press Update game (a few minutes, your saves are kept).")
+                self.rebuild_btn.pack(side="left", padx=12)
+            else:
+                self.rebuild_btn.pack_forget()
         else:
+            self.rebuild_btn.pack_forget()
             self.state_head.config(text="NOT INSTALLED YET")
             self.state_info.config(text="Choose your copy of the game below and press Install. The first install compiles "
                                         "the game on this computer (a few minutes).")
@@ -207,6 +229,67 @@ class Launcher(tk.Tk):
                     self.install_btn.state(["!disabled"])
                     self.refresh()
                 self.after(0, done)
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def rebuild_installed(self):
+        """Rebuilds the installed game with this version, from the game files it was built from."""
+        meta = self.installer().status() or {}
+        self.source.set(meta.get("game_dir", ""))
+        self.install_state = "outdated"
+        self.install()
+
+    # ---- updates ------------------------------------------------------------------------------------------------
+    def check_updates(self):
+        def work():
+            try:
+                info = updater.latest()
+            except updater.UpdateError as e:
+                self.write("Update check skipped: %s" % e)
+                return
+            if updater.is_newer(info):
+                self.after(0, lambda: self.show_update(info))
+        threading.Thread(target=work, daemon=True).start()
+
+    def show_update(self, info):
+        self.update_info = info
+        self.update_text.config(text="reGH2 %s is available (you have %s)" % (info["version"], __version__))
+        self.update_panel.pack(fill="x", pady=(0, 14), before=self.state_panel)
+
+    def restart_args(self):
+        flags = {"sdk": "--sdk=", "cxx": "--cxx=", "toolchain_file": "--toolchain-file=", "prefix": "--prefix="}
+        return [flags[k] + v for k, v in self.installer_args.items() if k in flags and v]
+
+    def apply_update(self):
+        if self.busy or not self.update_info:
+            return
+        info = self.update_info
+        if not updater.target_appimage():
+            messagebox.showinfo("Update", "This copy is not running from an AppImage, so it cannot replace itself.\n\n"
+                                "Download the new version here:\n" + info["page"])
+            return
+        self.busy = True
+        self.update_btn.state(["disabled"])
+
+        def work():
+            try:
+                path, replaced = updater.apply(info, progress=lambda f: self.set_progress(f, "Downloading reGH2 %s" % info["version"]),
+                                               log=self.write)
+            except updater.UpdateError as e:
+                self.write("ERROR: %s" % e)
+                self.after(0, lambda: messagebox.showerror("Update failed", str(e)))
+                self.after(0, lambda: (setattr(self, "busy", False), self.update_btn.state(["!disabled"]), self.set_progress(0, "")))
+                return
+            self.set_progress(1, "Updated")
+
+            def done():
+                if replaced:
+                    messagebox.showinfo("Updated", "reGH2 %s is installed. The launcher will restart now." % info["version"])
+                    subprocess.Popen([path, *self.restart_args()], env=clean_env(), start_new_session=True)
+                else:
+                    messagebox.showinfo("Updated", "The new version was saved as:\n%s\n\nStart it from there." % path)
+                self.destroy()
+            self.after(0, done)
 
         threading.Thread(target=work, daemon=True).start()
 

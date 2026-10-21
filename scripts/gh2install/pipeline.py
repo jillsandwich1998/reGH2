@@ -471,6 +471,15 @@ class Installer:
             return "other"
         return "current" if meta.get("fingerprint") == self.fingerprint() else "outdated"
 
+    def game_outdated(self):
+        """True when a game is installed and this version's code differs from what it was built from (and the game files it was
+        built from are still there, so it can be rebuilt without asking for the disc image again)."""
+        meta = self.status()
+        gd = (meta or {}).get("game_dir", "")
+        if not meta or not (os.path.isdir(gd) and find_xex(gd)):
+            return False
+        return self.install_state(gd) == "outdated"
+
     def check_xex(self, xex):
         self.progress(0.31, "Checking the game executable")
         digest = sha1_of(xex)

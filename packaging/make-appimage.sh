@@ -27,6 +27,10 @@ ldd "$llvm/bin/clang-20" "$llvm/bin/lld" | awk '/=> \//{print $3}' | sort -u | g
   | while read -r so; do cp -aL "$so" "$app/usr/toolchain/lib/"; done || true
 
 echo "== sysroot (glibc 2.35 + libstdc++ 13, extracted from the .deb files)"
+if [ -d "$out/sysroot-cache/usr" ]; then
+  echo "(using the sysroot kept in $out/sysroot-cache; delete it to download the packages again)"
+  cp -a "$out/sysroot-cache/." "$app/usr/sysroot/"
+else
 tmp="$(mktemp -d)"; cd "$tmp"
 apt-get update >/dev/null  # the builder image ships without package lists
 apt-get download libc6 libc6-dev linux-libc-dev libgcc-13-dev libstdc++-13-dev gcc-13-base libgcc-s1 libstdc++6 >/dev/null
@@ -38,11 +42,13 @@ find "$app/usr/sysroot" -type l | while read -r l; do
 done
 # merged-/usr layout expected by the toolchain
 [ -e "$app/usr/sysroot/lib" ] || ln -s usr/lib "$app/usr/sysroot/lib"
+mkdir -p "$out/sysroot-cache" && cp -a "$app/usr/sysroot/." "$out/sysroot-cache/"
+cd /; rm -rf "$tmp"
+fi
 # the runtime libstdc++ / libgcc_s that the built game needs on older distros
 cp -aL "$app/usr/sysroot/usr/lib/x86_64-linux-gnu/libstdc++.so.6" "$app/usr/lib/" 2>/dev/null || \
   cp -aL "$app/usr/sysroot/lib/x86_64-linux-gnu/libstdc++.so.6" "$app/usr/lib/"
 cp -aL "$app/usr/sysroot/lib/x86_64-linux-gnu/libgcc_s.so.1" "$app/usr/lib/"
-cd /; rm -rf "$tmp"
 
 echo "== fallback system libraries (used by AppRun only when the host lacks them)"
 mkdir -p "$app/usr/fallback"
