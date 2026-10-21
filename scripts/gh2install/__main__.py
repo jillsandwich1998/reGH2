@@ -1,4 +1,5 @@
 import argparse
+import os
 import sys
 
 from . import __version__
@@ -34,6 +35,12 @@ def main(argv=None):
     sub.add_parser("launch", help="start the game (extra options are passed to it, e.g. --startup_mode=menu)")
     p = sub.add_parser("shortcut", help="create or remove the app menu entry and desktop icon")
     p.add_argument("--remove", action="store_true")
+    p = sub.add_parser("uninstall", help="remove the installed game and its shortcuts (saves and DLC are kept)")
+    p.add_argument("--delete-saves", action="store_true", help="also delete saves, installed DLC and achievements (cannot be undone)")
+    p.add_argument("--dry-run", action="store_true", help="only show what would be removed")
+    p.add_argument("--yes", action="store_true", help="do not ask for confirmation")
+    p = sub.add_parser("saves", help="show where the save game is, or copy it into a zip")
+    p.add_argument("--export", metavar="FOLDER", help="write a zip with the save game and achievements into FOLDER")
     sub.add_parser("report", help="save a problem report (system, settings, logs) to attach to a GitHub issue")
     sub.add_parser("doctor", help="check the system for a Vulkan driver and offer to install it")
     sub.add_parser("version")
@@ -50,6 +57,19 @@ def main(argv=None):
                 shortcut.remove()
             else:
                 inst.make_shortcut()
+        elif a.cmd == "uninstall":
+            if not a.dry_run and not a.yes:
+                if not sys.stdin.isatty():
+                    raise InstallError("not a terminal: add --yes to confirm, or --dry-run to look first")
+                inst.uninstall(a.delete_saves, dry_run=True)
+                if input("Remove these? [y/N] ").strip().lower() != "y":
+                    print("nothing removed")
+                    return 1
+            inst.uninstall(a.delete_saves, dry_run=a.dry_run)
+        elif a.cmd == "saves":
+            print("Save game folder:", inst.user_data_dir())
+            if a.export:
+                print("Exported:", inst.export_saves(os.path.abspath(a.export)))
         elif a.cmd == "report":
             print(inst.write_report())
         elif a.cmd == "doctor":

@@ -66,6 +66,12 @@ class Launcher(tk.Tk):
         self.folder_btn.pack(side="left", padx=12)
         self.report_btn = ttk.Button(row, text="Save problem report", command=self.report)
         self.report_btn.pack(side="left")
+        row2 = ttk.Frame(self.state_panel, style="Panel.TFrame")
+        row2.pack(fill="x", pady=(10, 0))
+        ttk.Button(row2, text="Open saves folder", command=self.open_saves).pack(side="left")
+        ttk.Button(row2, text="Export saves...", command=self.export_saves).pack(side="left", padx=12)
+        self.uninstall_btn = ttk.Button(row2, text="Uninstall...", command=self.uninstall)
+        self.uninstall_btn.pack(side="left")
 
         self.install_panel = ttk.Frame(body, style="Panel.TFrame", padding=16)
         self.install_panel.pack(fill="x", pady=(14, 0))
@@ -252,6 +258,66 @@ class Launcher(tk.Tk):
             messagebox.showinfo("Data folder", "Nothing is installed yet, so there is no data folder.\n\n" + folder)
             return
         self.open_folder(folder)
+
+    def open_saves(self):
+        folder = self.installer().user_data_dir()
+        if not os.path.isdir(folder):
+            messagebox.showinfo("Saves", "There is no save game yet: it is created when you play.\n\n" + folder)
+            return
+        self.open_folder(folder)
+
+    def export_saves(self):
+        """Copies the save game and achievements into a zip in a folder the player picks."""
+        inst = self.installer()
+        if not os.path.isdir(inst.user_data_dir()):
+            messagebox.showinfo("Saves", "There is no save game yet: it is created when you play.")
+            return
+
+        def ask():
+            folder = native_dialog.pick_directory("Where do you want the saves copied to?", os.path.expanduser("~"))
+            self.after(0, lambda: self.exported(folder))
+
+        threading.Thread(target=ask, daemon=True).start()
+
+    def exported(self, folder):
+        if folder is None:  # no native dialog on this system
+            folder = filedialog.askdirectory(title="Where do you want the saves copied to?")
+        if not folder:
+            return
+        try:
+            path = self.installer().export_saves(folder)
+        except (InstallError, OSError) as e:
+            messagebox.showerror("Saves", str(e))
+            return
+        self.write("Saves exported: %s" % path)
+        messagebox.showinfo("Saves", "Saved a copy of your save game and achievements:\n\n%s" % path)
+
+    def uninstall(self):
+        """Removes the installed game and its shortcuts; saves and DLC are kept unless the user also says so."""
+        inst = self.installer()
+        if not inst.status():
+            messagebox.showinfo("Uninstall", "Nothing is installed.")
+            return
+        try:
+            items, keep = inst.uninstall_plan()
+        except InstallError as e:
+            messagebox.showerror("Uninstall", str(e))
+            return
+        total = sum(n for _, n in items) / 1e9
+        if not messagebox.askyesno("Uninstall", "Remove the installed game and its shortcuts (about %.1f GB)?\n\n%s" %
+                                   (total, "\n".join(keep) or "Nothing else is touched.")):
+            return
+        delete_saves = os.path.isdir(inst.user_data_dir()) and messagebox.askyesno(
+            "Saves", "Also delete your saves, installed DLC and achievements?\n\n%s\n\nThis cannot be undone. (\"Export saves...\" makes a copy first.)" % inst.user_data_dir(),
+            default="no")
+        try:
+            inst.uninstall(delete_saves)
+        except InstallError as e:
+            messagebox.showerror("Uninstall", str(e))
+            return
+        self.write("Uninstalled.")
+        self.refresh()
+        messagebox.showinfo("Uninstall", "The game was removed.")
 
     def report(self):
         """Saves a problem report (system, settings, log tails): for bugs where the game did not start or has crashed."""

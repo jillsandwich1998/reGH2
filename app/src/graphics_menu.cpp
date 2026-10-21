@@ -86,6 +86,18 @@ void DimWrapped(const char* fmt, ...) {
   va_end(args);
 }
 
+// Where the game keeps the player's saves, installed DLC and achievements.
+std::filesystem::path Gh2SaveDir() {
+  if (const char* x = std::getenv("XDG_DATA_HOME"); x && *x) return std::filesystem::path(x) / "gh2";
+  const char* h = std::getenv("HOME");
+  return std::filesystem::path(h ? h : "") / ".local" / "share" / "gh2";
+}
+
+std::string ShortenHome(std::string path) {
+  if (const char* h = std::getenv("HOME"); h && *h && path.rfind(h, 0) == 0) path.replace(0, std::strlen(h), "~");
+  return path;
+}
+
 std::string Get(const char* name) { return rex::cvar::GetFlagByName(name); }
 bool GetBool(const char* name) { return Get(name) == "true"; }
 int GetInt(const char* name, int fallback) {
@@ -502,6 +514,14 @@ class GraphicsDialog : public rex::ui::ImGuiDialog {
     Heading("PERFORMANCE");
     bool fps = GetBool("show_fps");
     if (ImGui::Checkbox("Show FPS counter (with graph)", &fps)) Set("show_fps", fps ? "true" : "false");
+
+    Heading("SAVE GAME");
+    const std::filesystem::path save_dir = Gh2SaveDir();
+    if (ImGui::Button("Open saves folder")) {
+      const std::string dir = save_dir.string();
+      std::thread([dir] { std::system(("xdg-open '" + dir + "' >/dev/null 2>&1").c_str()); }).detach();
+    }
+    ImGui::TextDisabled("%s", ShortenHome(save_dir.string()).c_str());
 
     Heading("SUPPORT");
     if (ImGui::Button("Save problem report")) {

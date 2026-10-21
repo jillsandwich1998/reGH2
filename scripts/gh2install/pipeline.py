@@ -191,6 +191,94 @@ class Installer:
         except OSError as e:
             self.log("Could not create the shortcut: %s" % e)
 
+    # ---- uninstall ----------------------------------------------------------------------------------------------
+    def user_data_dir(self):
+        """Saves, installed DLC, achievements and the shader cache. Shared by every build of the game, kept by default."""
+        return os.path.join(os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share"), "gh2")
+
+    def export_saves(self, dest_dir):
+        """Zips the save game (the player's profile) and the achievements into dest_dir. The shader cache and the installed
+        DLC (a big folder that can be installed again) are left out. Returns the path of the zip."""
+        import zipfile
+        root = self.user_data_dir()
+        skip = ("cache", "0000000000000000")
+        files = []
+        if os.path.isdir(root):
+            for entry in sorted(os.listdir(root)):
+                if entry in skip:
+                    continue
+                for dp, _, names in os.walk(os.path.join(root, entry)):
+                    files += [os.path.join(dp, n) for n in sorted(names)]
+        if not files:
+            raise InstallError("no save game found in %s (play and save in the game first)" % root)
+        os.makedirs(dest_dir, exist_ok=True)
+        path = os.path.join(dest_dir, time.strftime("reGH2-saves-%Y%m%d-%H%M%S.zip"))
+        with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
+            for f in files:
+                z.write(f, os.path.join("gh2", os.path.relpath(f, root)))
+        return path
+
+    def running_game_pids(self):
+        app = os.path.join(self.prefix, "app", "gh2")
+        pids = []
+        for d in os.listdir("/proc"):
+            if d.isdigit():
+                try:
+                    exe = os.readlink("/proc/%s/exe" % d)
+                except OSError:
+                    continue
+                if exe in (app, app + " (deleted)"):
+                    pids.append(int(d))
+        return pids
+
+    def uninstall_plan(self, delete_saves=False):
+        """What uninstall would remove: [(path, size in bytes)], plus notes about what stays."""
+        def size(path):
+            total = 0
+            for dp, _, files in os.walk(path):
+                for f in files:
+                    try:
+                        total += os.lstat(os.path.join(dp, f)).st_size
+                    except OSError:
+                        pass
+            return total
+        items, keep = [], []
+        if os.path.isdir(self.prefix):
+            if not (os.path.exists(os.path.join(self.prefix, "install.json")) or os.path.isdir(os.path.join(self.prefix, "app"))):
+                raise InstallError("%s does not look like an installation of this program; nothing was removed" % self.prefix)
+            items.append((self.prefix, size(self.prefix)))
+        cache = os.path.join(os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache"), "gh2-recomp")
+        if os.path.isdir(cache):
+            items.append((cache, size(cache)))
+        meta = self.status() or {}
+        game_dir = meta.get("game_dir")
+        if game_dir and os.path.isdir(game_dir) and not os.path.abspath(game_dir).startswith(self.prefix + os.sep):
+            keep.append("your own game folder %s is never touched" % game_dir)
+        data = self.user_data_dir()
+        if os.path.isdir(data):
+            if delete_saves:
+                items.append((data, size(data)))
+            else:
+                keep.append("your saves, DLC and achievements in %s are kept" % data)
+        return items, keep
+
+    def uninstall(self, delete_saves=False, dry_run=False):
+        """Removes the installed game, its shortcuts and cache. Saves and DLC stay unless `delete_saves`."""
+        pids = self.running_game_pids()
+        if pids:
+            raise InstallError("the game is running (process %s): close it first" % ", ".join(map(str, pids)))
+        items, keep = self.uninstall_plan(delete_saves)
+        for path, nbytes in items:
+            self.log("%s %s (%.1f MB)" % ("would remove" if dry_run else "removing", path, nbytes / 1e6))
+        for note in keep:
+            self.log("kept: " + note)
+        if dry_run:
+            return items, keep
+        for path, _ in items:
+            shutil.rmtree(path, ignore_errors=True)
+        shortcut.remove(log=self.log)
+        return items, keep
+
     def write_report(self):
         """Problem report from outside the game (for when it will not start or has crashed): install record, system, the
         game's settings and the tails of its logs. The home folder is replaced by "~" so it can go into a public issue."""

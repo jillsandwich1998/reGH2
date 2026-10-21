@@ -98,7 +98,8 @@ def create(appimage, icon_source=None, desktop_icon=True, log=print):
 
 def remove(log=print):
     desk = desktop_dir()
-    for p in (menu_entry_path(), os.path.join(desk, DESKTOP_FILE) if desk else None,
+    names = (DESKTOP_FILE,) + LEGACY_DESKTOP_FILES
+    for p in (menu_entry_path(), *(os.path.join(desk, n) if desk else None for n in names),
               os.path.join(_data_home(), "icons", "hicolor", "256x256", "apps", NAME + ".png")):
         if p and os.path.exists(p):
             os.remove(p)

@@ -17,7 +17,7 @@ recompiles the game on your computer from the disc image (.iso), the extracted g
 2. Press **Select folder...** and choose the folder that holds your game (the disc image, the extracted game, or the folder with `default.xex`; it is searched for inside), then **Install** (a few minutes: the game is compiled here).
 3. Press **PLAY**. In the game press **F2** for the options (graphics, display mode, controllers, keyboard, DLC, start-up, FPS counter) and to **Quit game** (it asks for confirmation).
 
-Command line: `reGH2-x86_64.AppImage install <iso|folder|default.xex>`, `... launch [game options]`, `... status`, `... doctor`.
+Command line: `reGH2-x86_64.AppImage install <iso|folder|default.xex>`, `... launch [game options]`, `... status`, `... doctor`, `... report`, `... saves`, `... uninstall`.
 
 ## Testing and reporting problems
 
@@ -36,6 +36,14 @@ reproduce and analyse the problem:
    The report is one text file with your system, the settings in use, the controllers, the game's frame rate and the end of its
    logs. Your home folder is replaced by `~`; open the file and check it if you want before sharing it.
 4. Include your graphics card, its driver and your Linux distribution if the report cannot tell them (it usually can).
+
+## Saves and uninstalling
+
+* Your save game, achievements and installed DLC live in `~/.local/share/gh2`. In the game, **F2 > GAME > Open saves folder** opens it; in
+  the launcher, **Open saves folder** does the same and **Export saves...** copies the save game and achievements into a `.zip`
+  (`reGH2-x86_64.AppImage saves --export <folder>` from the command line). The DLC, which can be installed again, is not in the zip.
+* **Uninstall...** in the launcher (or `reGH2-x86_64.AppImage uninstall`) removes the installed game, its shortcuts and its cache. It keeps
+  your saves, DLC and achievements unless you say otherwise, and it never touches your own copy of the game. Close the game first.
 
 ## Requirements
 
