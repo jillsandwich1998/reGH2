@@ -410,6 +410,18 @@ class Installer:
             raise InstallError("the image has no default.xex")
         return game_dir
 
+    def ensure_toolchain_file(self):
+        """The AppImage writes the CMake toolchain file (bundled compiler and sysroot) into the cache folder when it starts. Uninstall
+        removes that folder, and so can the user, so a launcher that stays open must be able to write the file again."""
+        tf = self.toolchain_file
+        appdir = os.environ.get("APPDIR")
+        template = os.path.join(appdir or "", "usr", "app", "toolchain.cmake.in")
+        if not tf or os.path.exists(tf) or not appdir or not os.path.exists(template):
+            return
+        os.makedirs(os.path.dirname(tf), exist_ok=True)
+        with open(template) as f, open(tf, "w") as out:
+            out.write(f.read().replace("@APPDIR@", appdir))
+
     def fingerprint(self):
         """Identifies what gets compiled (our sources, hints, CMake and the SDK patches): a different one means the
         installed game is out of date and a rebuild is worthwhile."""
@@ -540,6 +552,7 @@ class Installer:
             self.make_shortcut()
             self.progress(1.0, "Already installed")
             return meta
+        self.ensure_toolchain_file()
         self.progress(0.01, "Looking for the game")
         game_dir = self.locate_game(source)
         xex = find_xex(game_dir)
