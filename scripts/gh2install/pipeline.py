@@ -608,4 +608,5 @@ class Installer:
         app = os.path.join(self.prefix, "app")
         self.ensure_runtime()  # cheap when nothing changed; brings the runtime of an older install up to date
         env = self.game_env()
+        os.chdir(app)  # the game keeps its logs, perf.log and problem reports in ./logs: the app-menu shortcut starts it from anywhere
         os.execve(os.path.join(app, "gh2"), [os.path.join(app, "gh2"), *extra_args], env)
