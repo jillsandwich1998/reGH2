@@ -1,0 +1,90 @@
+From 3b097a6dbfcddf9e2c69d5d64dd9f8f9ce9f0ceb Mon Sep 17 00:00:00 2001
+From: gh2 <x@x>
+Date: Mon, 19 Oct 2026 21:13:20 -0300
+Subject: [PATCH 1/7] FSR/CAS spatial presenter without FidelityFX (Forza
+ 0043); shm_unlink right after creation
+
+---
+ CMakeLists.txt            |  4 ++++
+ src/core/memory_posix.cpp |  3 +++
+ src/ui/CMakeLists.txt     |  4 +++-
+ src/ui/presenter.cpp      | 10 ++++++++++
+ 4 files changed, 20 insertions(+), 1 deletion(-)
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index c9dfc17..52cb598 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -256,6 +256,10 @@ add_compile_options(
+ 
+ include_directories(${REXGLUE_ROOT}/include)
+ 
++# The spatial output effects (CAS, FSR 1) run precompiled shaders from src/ui/shaders and need
++# no FidelityFX library. The macro changes the layout of ui::Presenter, so every target that
++# includes <rex/ui/presenter.h> (rexui, the Xenos plugin, the games) must see it.
++add_compile_definitions(REX_HAS_FIDELITYFX_SDK=1)
+ add_subdirectory(src/core)
+ add_subdirectory(src/filesystem)
+ add_subdirectory(src/ui)
+diff --git a/src/core/memory_posix.cpp b/src/core/memory_posix.cpp
+index b52bf39..2d89e11 100644
+--- a/src/core/memory_posix.cpp
++++ b/src/core/memory_posix.cpp
+@@ -483,6 +483,9 @@ FileMappingHandle CreateFileMappingHandle(const std::filesystem::path& path, siz
+     shm_unlink(full_path.c_str());
+     return kFileMappingHandleInvalid;
+   }
++  // GH2: unlink at once. The mapping lives on through the fd, and the multi-GB guest memory object no longer
++  // leaks in /dev/shm when the process is killed or crashes (it used to fill /dev/shm and SIGBUS later runs).
++  shm_unlink(full_path.c_str());
+   return static_cast<FileMappingHandle>(ret);
+ #endif
+ }
+diff --git a/src/ui/CMakeLists.txt b/src/ui/CMakeLists.txt
+index 5bd3dc5..4c2e7fb 100644
+--- a/src/ui/CMakeLists.txt
++++ b/src/ui/CMakeLists.txt
+@@ -116,12 +116,14 @@ target_link_libraries(rexui PUBLIC
+ )
+ target_link_libraries(rexui PRIVATE utf8cpp)
+ 
++# REX_HAS_FIDELITYFX_SDK (the spatial effects, CAS and FSR 1) is defined for the whole SDK in
++# the top-level CMakeLists.txt; only the temporal upscaler (REX_HAS_FIDELITYFX_RUNTIME below)
++# needs the FidelityFX SDK.
+ if(REXGLUE_FIDELITYFX_SOURCE_DIR AND EXISTS "${REXGLUE_FIDELITYFX_SOURCE_DIR}/sdk/include")
+     target_include_directories(rexui PRIVATE
+         "${REXGLUE_FIDELITYFX_SOURCE_DIR}/sdk/include"
+         "${REXGLUE_FIDELITYFX_SOURCE_DIR}/ffx-api/include"
+     )
+-    target_compile_definitions(rexui PRIVATE REX_HAS_FIDELITYFX_SDK=1)
+ endif()
+ 
+ set(REXUI_HAS_FIDELITYFX_RUNTIME OFF)
+diff --git a/src/ui/presenter.cpp b/src/ui/presenter.cpp
+index 7360ed9..90797af 100644
+--- a/src/ui/presenter.cpp
++++ b/src/ui/presenter.cpp
+@@ -41,10 +41,20 @@ REXCVAR_DEFINE_INT32(present_safe_area_y, 90, "UI/Presenter",
+     .range(0, 100);
+ 
+ #if defined(REX_HAS_FIDELITYFX_SDK)
++#if defined(REX_HAS_FIDELITYFX_RUNTIME) && REX_HAS_FIDELITYFX_RUNTIME
+ REXCVAR_DEFINE_STRING(present_effect, "bilinear", "UI/Presenter",
+                       "Guest output effect: bilinear, cas, fsr, fsr2, fsr3")
+     .allowed({"bilinear", "cas", "fsr", "fsr2", "fsr3"})
+     .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
++#else
++// Without the FidelityFX runtime there is no temporal upscaler: fsr2 / fsr3 would only run
++// the spatial FSR 1 passes under a name that promises more.
++REXCVAR_DEFINE_STRING(present_effect, "bilinear", "UI/Presenter",
++                      "Guest output effect: bilinear, cas (sharpen, up to 2x), fsr (FSR 1 "
++                      "upscaling and sharpening)")
++    .allowed({"bilinear", "cas", "fsr"})
++    .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
++#endif
+ 
+ REXCVAR_DEFINE_DOUBLE(present_cas_additional_sharpness,
+                       rex::ui::Presenter::GuestOutputPaintConfig::kCasAdditionalSharpnessDefault,
+-- 
+2.56.0
+

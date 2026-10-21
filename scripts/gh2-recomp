@@ -1,0 +1,5 @@
+#!/bin/sh
+# Command line entry point: gh2-recomp install <image|folder|default.xex> | launch | status
+here="$(cd "$(dirname "$0")" && pwd)"
+export PYTHONPATH="$here${PYTHONPATH:+:$PYTHONPATH}"
+exec python3 -m gh2install "$@"

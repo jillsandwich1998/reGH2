@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=reGH2
+Comment=Install and play Guitar Hero II from your own copy of the game
+Exec=AppRun
+Icon=gh2-recomp
+Categories=Game;
+Terminal=false

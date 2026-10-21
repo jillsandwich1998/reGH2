@@ -1,0 +1,42 @@
+name: Problem report
+description: Something does not work, runs slowly or crashes
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for testing reGH2. To analyse a problem we need to see it happen, so please fill in all the fields.
+        The problem report is made in the game (F2 > GAME > **Save problem report**, right after the problem) or, if the game
+        does not start or has crashed, in the launcher (**Save problem report**) or with `reGH2-x86_64.AppImage report`.
+  - type: textarea
+    id: what
+    attributes:
+      label: What went wrong?
+      description: What you expected and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: moment
+    attributes:
+      label: At what moment of the game does it happen?
+      description: In a menu or in a song? Which song and difficulty? What was on screen, and what happened just before (an achievement, a change in the options, ...)?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Can you make it happen again? How?
+      description: The steps, or "it happened once".
+    validations:
+      required: true
+  - type: textarea
+    id: report
+    attributes:
+      label: Problem report
+      description: Drag the report file (a .txt) into this box to attach it.
+    validations:
+      required: true
+  - type: input
+    id: hardware
+    attributes:
+      label: Graphics card, driver and Linux distribution
+      description: Only if you know them; the report usually contains them.

@@ -1,0 +1,44 @@
+From ac375abae7a77a6446ac1fe5956e0b912b44863f Mon Sep 17 00:00:00 2001
+From: gh2 <x@x>
+Date: Mon, 19 Oct 2026 21:44:26 -0300
+Subject: [PATCH 2/7] GH2 defaults: no anisotropic override (original look),
+ FIFO-only present (host repainted ~1280x/s)
+
+---
+ src/graphics/pipeline/texture/cache.cpp | 2 +-
+ src/ui/vulkan/vulkan_presenter.cpp      | 4 ++--
+ 2 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/src/graphics/pipeline/texture/cache.cpp b/src/graphics/pipeline/texture/cache.cpp
+index 76f5600..1f04fd2 100644
+--- a/src/graphics/pipeline/texture/cache.cpp
++++ b/src/graphics/pipeline/texture/cache.cpp
+@@ -49,7 +49,7 @@ REXCVAR_DEFINE_BOOL(gpu_3d_to_2d_texture, true, "GPU",
+                     "Sample problematic 3D textures through 2D-compatible wrappers")
+     .lifecycle(rex::cvar::Lifecycle::kHotReload);
+ 
+-REXCVAR_DEFINE_INT32(anisotropic_override, 3, "GPU",
++REXCVAR_DEFINE_INT32(anisotropic_override, -1, "GPU",
+                      "Forces anisotropic filtering for eligible textures.\n"
+                      "Higher values keep textures sharper at oblique angles, but increase texture "
+                      "sampling cost.\n"
+diff --git a/src/ui/vulkan/vulkan_presenter.cpp b/src/ui/vulkan/vulkan_presenter.cpp
+index 23645ef..40753b6 100644
+--- a/src/ui/vulkan/vulkan_presenter.cpp
++++ b/src/ui/vulkan/vulkan_presenter.cpp
+@@ -49,10 +49,10 @@
+ REXCVAR_DEFINE_BOOL(present_render_pass_clear, true, "UI/Presenter",
+                     "Clear render pass during presentation");
+ 
+-REXCVAR_DEFINE_BOOL(vulkan_allow_present_mode_immediate, true, "UI/Vulkan",
++REXCVAR_DEFINE_BOOL(vulkan_allow_present_mode_immediate, false, "UI/Vulkan",
+                     "Allow immediate present mode (no vsync)");
+ 
+-REXCVAR_DEFINE_BOOL(vulkan_allow_present_mode_mailbox, true, "UI/Vulkan",
++REXCVAR_DEFINE_BOOL(vulkan_allow_present_mode_mailbox, false, "UI/Vulkan",
+                     "Allow mailbox present mode (triple buffering)");
+ 
+ REXCVAR_DEFINE_BOOL(vulkan_allow_present_mode_fifo_relaxed, true, "UI/Vulkan",
+-- 
+2.56.0
+

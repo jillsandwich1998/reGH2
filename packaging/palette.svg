@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="720" font-family="Sans" >
+<rect width="100%" height="100%" fill="#0b0606"/>
+<text x="30" y="55" font-size="30" font-weight="bold" fill="#f7f2ea">GH2 Recomp - launcher palette</text>
+<text x="30" y="100" font-size="16" fill="#ffd440" font-weight="bold">SURFACES</text>
+<rect x="30" y="114" width="150" height="70" rx="10" fill="#0b0606" stroke="#ffffff" stroke-opacity="0.25"/>
+<text x="30" y="205" font-size="13" fill="#f7f2ea">stage black  #0b0606</text>
+<rect x="200" y="114" width="150" height="70" rx="10" fill="#1a0b0b" stroke="#ffffff" stroke-opacity="0.25"/>
+<text x="200" y="205" font-size="13" fill="#f7f2ea">panel  #1a0b0b</text>
+<rect x="370" y="114" width="150" height="70" rx="10" fill="#261212" stroke="#ffffff" stroke-opacity="0.25"/>
+<text x="370" y="205" font-size="13" fill="#f7f2ea">raised  #261212</text>
+<rect x="540" y="114" width="150" height="70" rx="10" fill="#2a1515" stroke="#ffffff" stroke-opacity="0.25"/>
+<text x="540" y="205" font-size="13" fill="#f7f2ea">trough  #2a1515</text>
+<text x="30" y="250" font-size="16" fill="#ffd440" font-weight="bold">BRAND</text>
+<rect x="30" y="264" width="150" height="70" rx="10" fill="#cc1c1a" stroke="#ffffff" stroke-opacity="0.25"/>
+<text x="30" y="355" font-size="13" fill="#f7f2ea">red  #cc1c1a</text>
+<rect x="200" y="264" width="150" height="70" rx="10" fill="#661010" stroke="#ffffff" stroke-opacity="0.25"/>
+<text x="200" y="355" font-size="13" fill="#f7f2ea">deep red  #661010</text>
+<rect x="370" y="264" width="150" height="70" rx="10" fill="#fa8019" stroke="#ffffff" stroke-opacity="0.25"/>
+<text x="370" y="355" font-size="13" fill="#f7f2ea">orange  #fa8019</text>
+<rect x="540" y="264" width="150" height="70" rx="10" fill="#ffd440" stroke="#ffffff" stroke-opacity="0.25"/>
+<text x="540" y="355" font-size="13" fill="#f7f2ea">gold  #ffd440</text>
+<text x="30" y="400" font-size="16" fill="#ffd440" font-weight="bold">TEXT AND METAL</text>
+<rect x="30" y="414" width="150" height="70" rx="10" fill="#f7f2ea" stroke="#ffffff" stroke-opacity="0.25"/>
+<text x="30" y="505" font-size="13" fill="#f7f2ea">text  #f7f2ea</text>
+<rect x="200" y="414" width="150" height="70" rx="10" fill="#9d8580" stroke="#ffffff" stroke-opacity="0.25"/>
+<text x="200" y="505" font-size="13" fill="#f7f2ea">dim  #9d8580</text>
+<rect x="370" y="414" width="150" height="70" rx="10" fill="#c9ccd2" stroke="#ffffff" stroke-opacity="0.25"/>
+<text x="370" y="505" font-size="13" fill="#f7f2ea">silver  #c9ccd2</text>
+<rect x="540" y="414" width="150" height="70" rx="10" fill="#8b8f98" stroke="#ffffff" stroke-opacity="0.25"/>
+<text x="540" y="505" font-size="13" fill="#f7f2ea">steel  #8b8f98</text>
+<text x="30" y="550" font-size="16" fill="#ffd440" font-weight="bold">FRETS</text>
+<rect x="30" y="564" width="150" height="70" rx="10" fill="#2fbf3a" stroke="#ffffff" stroke-opacity="0.25"/>
+<text x="30" y="655" font-size="13" fill="#f7f2ea">green  #2fbf3a</text>
+<rect x="200" y="564" width="150" height="70" rx="10" fill="#e5322d" stroke="#ffffff" stroke-opacity="0.25"/>
+<text x="200" y="655" font-size="13" fill="#f7f2ea">red  #e5322d</text>
+<rect x="370" y="564" width="150" height="70" rx="10" fill="#f5d321" stroke="#ffffff" stroke-opacity="0.25"/>
+<text x="370" y="655" font-size="13" fill="#f7f2ea">yellow  #f5d321</text>
+<rect x="540" y="564" width="150" height="70" rx="10" fill="#2f7bf0" stroke="#ffffff" stroke-opacity="0.25"/>
+<text x="540" y="655" font-size="13" fill="#f7f2ea">blue  #2f7bf0</text>
+<rect x="710" y="564" width="150" height="70" rx="10" fill="#f58a1f" stroke="#ffffff" stroke-opacity="0.25"/>
+<text x="710" y="655" font-size="13" fill="#f7f2ea">orange  #f58a1f</text>
+</svg>

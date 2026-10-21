@@ -1,0 +1,28 @@
+#!/bin/sh
+# AppImage entry: no arguments -> graphical launcher; otherwise the command line tool (install / launch / status).
+here="$(dirname "$(readlink -f "$0")")"
+export APPDIR="$here"
+cache="${XDG_CACHE_HOME:-$HOME/.cache}/gh2-recomp"
+mkdir -p "$cache"
+export PATH="$here/usr/toolchain/bin:$here/usr/cmake/bin:$PATH"
+export LD_LIBRARY_PATH="$here/usr/lib:$here/usr/toolchain/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+# bundled copies of system libraries (X11/xcb/wayland client, Vulkan loader): only the ones the host does not provide
+fb="$cache/fallback-libs"; rm -rf "$fb"; mkdir -p "$fb"
+ldc="$(/sbin/ldconfig -p 2>/dev/null || ldconfig -p 2>/dev/null)"
+for f in "$here"/usr/fallback/*; do
+  n="$(basename "$f")"
+  echo "$ldc" | grep -q "^[[:space:]]*$n .*x86-64" || ln -s "$f" "$fb/$n"
+done
+export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$fb"
+export GH2_SDK="$here/usr/sdk"
+export GH2_CXX="$here/usr/toolchain/bin/clang++"
+sed "s|@APPDIR@|$here|g" "$here/usr/app/toolchain.cmake.in" > "$cache/toolchain.cmake"
+export GH2_TOOLCHAIN_FILE="$cache/toolchain.cmake"
+export PYTHONHOME="$here/usr/python"
+export PYTHONPATH="$here/usr/app/scripts"
+export TCL_LIBRARY="$here/usr/python/lib/tcl8.6" TK_LIBRARY="$here/usr/python/lib/tk8.6"
+py="$here/usr/python/bin/python3"
+if [ $# -eq 0 ]; then
+  exec "$py" "$here/usr/app/launcher/gh2_launcher.py"
+fi
+exec "$py" -m gh2install "$@"

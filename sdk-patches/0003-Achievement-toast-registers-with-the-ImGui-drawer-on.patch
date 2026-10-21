@@ -1,0 +1,113 @@
+From 625ab985143a7b6bc2fd36007a21791a60a96fdb Mon Sep 17 00:00:00 2001
+From: gh2 <x@x>
+Date: Mon, 19 Oct 2026 22:02:18 -0300
+Subject: [PATCH 3/7] Achievement toast registers with the ImGui drawer only
+ while a toast is queued (avoids continuous host repaint)
+
+---
+ include/rex/ui/imgui_drawer.h              |  1 +
+ include/rex/ui/overlay/achievement_toast.h |  3 ++
+ src/ui/overlay/achievement_toast.cpp       | 35 ++++++++++++++++++----
+ 3 files changed, 34 insertions(+), 5 deletions(-)
+
+diff --git a/include/rex/ui/imgui_drawer.h b/include/rex/ui/imgui_drawer.h
+index a570fa0..49b4bce 100644
+--- a/include/rex/ui/imgui_drawer.h
++++ b/include/rex/ui/imgui_drawer.h
+@@ -45,6 +45,7 @@ class ImGuiDrawer : public WindowInputListener, public UIDrawer {
+   Style& style() { return style_; }
+   const Style& style() const { return style_; }
+ 
++  Window* window() const { return window_; }
+   void AddDialog(ImGuiDialog* dialog);
+   void RemoveDialog(ImGuiDialog* dialog);
+ 
+diff --git a/include/rex/ui/overlay/achievement_toast.h b/include/rex/ui/overlay/achievement_toast.h
+index 7642601..1601a7b 100644
+--- a/include/rex/ui/overlay/achievement_toast.h
++++ b/include/rex/ui/overlay/achievement_toast.h
+@@ -47,6 +47,9 @@ class AchievementToastDialog : public AchievementNotificationDialog {
+     std::optional<std::chrono::steady_clock::time_point> visible_since;
+   };
+ 
++  // GH2: the toast is registered with the ImGui drawer only while a toast is queued. A registered dialog makes the
++  // presenter repaint on every display refresh (3x the guest frame rate at 180 Hz), so an idle toast must not be one.
++  bool registered_ = false;  // guarded by mutex_
+   std::mutex mutex_;
+   std::deque<PendingToast> queue_;
+   AchievementIconCache icon_cache_;
+diff --git a/src/ui/overlay/achievement_toast.cpp b/src/ui/overlay/achievement_toast.cpp
+index 53b8c0b..8e64c82 100644
+--- a/src/ui/overlay/achievement_toast.cpp
++++ b/src/ui/overlay/achievement_toast.cpp
+@@ -13,20 +13,37 @@
+ 
+ #include <algorithm>
+ 
++#include <rex/ui/imgui_drawer.h>
+ #include <rex/ui/immediate_drawer.h>
++#include <rex/ui/window.h>
++#include <rex/ui/windowed_app_context.h>
+ 
+ namespace rex::ui {
+ 
+ AchievementToastDialog::AchievementToastDialog(ImGuiDrawer* drawer,
+                                                ImmediateDrawer* immediate_drawer,
+                                                rex::Runtime* runtime)
+-    : AchievementNotificationDialog(drawer), icon_cache_(immediate_drawer, runtime) {}
++    : AchievementNotificationDialog(drawer), icon_cache_(immediate_drawer, runtime) {
++  // ImGuiDialog's constructor registered the dialog; stay unregistered until the first toast arrives (see Push).
++  drawer->RemoveDialog(this);
++}
+ 
+ AchievementToastDialog::~AchievementToastDialog() {}
+ 
+ void AchievementToastDialog::Push(const rex::system::AchievementEvent& event) {
+-  std::lock_guard<std::mutex> lock(mutex_);
+-  queue_.push_back({event, std::chrono::steady_clock::now()});
++  bool add = false;
++  {
++    std::lock_guard<std::mutex> lock(mutex_);
++    queue_.push_back({event, std::chrono::steady_clock::now()});
++    if (!registered_) {
++      registered_ = true;
++      add = true;
++    }
++  }
++  if (add) {
++    ImGuiDrawer* drawer = imgui_drawer();
++    drawer->window()->app_context().CallInUIThread([this, drawer] { drawer->AddDialog(this); });
++  }
+ }
+ 
+ void AchievementToastDialog::OnDraw(ImGuiIO& io) {
+@@ -34,6 +51,7 @@ void AchievementToastDialog::OnDraw(ImGuiIO& io) {
+ 
+   PendingToast toast;
+   float age = 0.0f;
++  bool remove = false;
+   {
+     std::lock_guard<std::mutex> lock(mutex_);
+     while (!queue_.empty()) {
+@@ -48,9 +66,16 @@ void AchievementToastDialog::OnDraw(ImGuiIO& io) {
+       }
+     }
+     if (queue_.empty()) {
+-      return;
++      registered_ = false;
++      remove = true;
++    } else {
++      toast = queue_.front();
+     }
+-    toast = queue_.front();
++  }
++
++  if (remove) {
++    imgui_drawer()->RemoveDialog(this);
++    return;
+   }
+ 
+   float alpha = 1.0f;
+-- 
+2.56.0
+

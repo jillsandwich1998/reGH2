@@ -1,0 +1,10 @@
+# Codegen manifest for the user's own default.xex (filled in by the installer).
+[project]
+name = "gh2"
+sdk_version = "0.10.0"
+game_root = "@GAME_ROOT@"
+
+[entrypoint]
+file_path = "@XEX_PATH@"
+out_directory_path = "generated/default"
+includes = ["hints/functions.toml"]

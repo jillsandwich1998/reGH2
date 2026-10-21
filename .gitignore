@@ -1,0 +1,11 @@
+# Nothing derived from the game may ever be committed.
+generated/
+out/
+*.xex
+*.ark
+*.hdr
+*.iso
+*.AppImage
+dist/
+__pycache__/
+

@@ -1,0 +1,31 @@
+From 80ca7318e5f765fde57a3d7bd9ccc071f618f1f2 Mon Sep 17 00:00:00 2001
+From: gh2 <x@x>
+Date: Tue, 20 Oct 2026 01:05:32 -0300
+Subject: [PATCH 4/7] WaitMultiple: sleep for the real remaining time (ms
+ truncation made the last millisecond of every multi-handle wait spin; audio
+ worker burned ~80% of a core)
+
+---
+ src/core/threading_posix.cpp | 6 ++++--
+ 1 file changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/src/core/threading_posix.cpp b/src/core/threading_posix.cpp
+index 9ac8d15..2be46c9 100644
+--- a/src/core/threading_posix.cpp
++++ b/src/core/threading_posix.cpp
+@@ -414,8 +414,10 @@ class PosixConditionBase {
+       if (timeout == std::chrono::milliseconds::max()) {
+         std::this_thread::sleep_for(std::chrono::milliseconds(1));
+       } else {
+-        auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - now);
+-        auto sleep_time = std::min(remaining, std::chrono::milliseconds(1));
++        // GH2: the remaining time used to be truncated to whole milliseconds, so the last millisecond of every
++        // wait slept for 0 and spun (the audio worker's 1 ms alertable WaitAny burned ~80% of a core).
++        auto remaining = end_time - now;
++        auto sleep_time = std::min<std::chrono::steady_clock::duration>(remaining, std::chrono::milliseconds(1));
+         std::this_thread::sleep_for(sleep_time);
+       }
+     }
+-- 
+2.56.0
+

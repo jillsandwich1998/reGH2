@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Original artwork for this project (MIT). Colours: launcher/palette.py -->
+  <defs>
+    <linearGradient id="disc" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#e5322d"/>
+      <stop offset="1" stop-color="#cc1c1a"/>
+    </linearGradient>
+    <linearGradient id="metal" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f7f2ea"/>
+      <stop offset="1" stop-color="#c9ccd2"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="#0b0606"/>
+  <circle cx="256" cy="256" r="204" fill="url(#disc)" stroke="#ffd440" stroke-width="10"/>
+  <!-- the sign of the horns: one silver shape, parts separated by thin cuts in the disc colour -->
+  <g transform="translate(256 238) scale(0.86) translate(-259 -262)" stroke="#cc1c1a" stroke-width="9" stroke-linejoin="round" fill="url(#metal)">
+    <rect x="166" y="96" width="58" height="214" rx="29" transform="rotate(-11 195 310)"/>
+    <rect x="290" y="132" width="52" height="184" rx="26" transform="rotate(12 316 316)"/>
+    <path d="M168 292 H346 Q372 292 372 322 V380 Q372 440 312 440 H206 Q150 440 150 384 V322 Q150 292 168 292Z"/>
+    <rect x="214" y="246" width="106" height="66" rx="33"/>
+    <rect x="182" y="322" width="140" height="50" rx="25" transform="rotate(-9 252 347)"/>
+  </g>
+  <!-- the five frets -->
+  <g stroke="#0b0606" stroke-width="5">
+    <circle cx="176" cy="428" r="15" fill="#2fbf3a"/><circle cx="216" cy="428" r="15" fill="#e5322d"/>
+    <circle cx="256" cy="428" r="15" fill="#f5d321"/><circle cx="296" cy="428" r="15" fill="#2f7bf0"/>
+    <circle cx="336" cy="428" r="15" fill="#f58a1f"/>
+  </g>
+</svg>
