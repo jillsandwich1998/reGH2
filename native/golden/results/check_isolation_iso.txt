@@ -1,0 +1,9 @@
+[ok] S1  no `rex::` in the code of abi/include, hooks, trace
+[ok] S2  no Xenia copyright header under native/
+[ok] S3a imports.txt matches the generated code (179 imports)
+[ok] S3b tracer wrappers are up to date
+[ok] S3c compared against /home/davi/Documents/Projetos/Game_Recomps/GH2/work/sdk-src/include: no drift (5 verbatim files + func.h with its expected diff)
+[ok] B1  117 shim-only translation units; include dirs holding an SDK rex/ tree: none
+[ok] B2a libgh2_cpu.a: inputs: 1 file(s); undefined symbols (sum over members) 31504, defined 62729; EXTERNAL (undefined - defined) = 206 | contract : 187  = 179 kernel imports (of 179 in the contract) + 8 runtime services (gh2abi::*, gh2_spin_hint) + 0 hooked guest functions | FORBIDDEN:   0 | other    :   0
+[ok] B2b hooks + trace objects: inputs: 10 file(s); undefined symbols (sum over members) 282, defined 592; EXTERNAL (undefined - defined) = 262 | FORBIDDEN:   0 | other    :   0
+OVERALL: PASS

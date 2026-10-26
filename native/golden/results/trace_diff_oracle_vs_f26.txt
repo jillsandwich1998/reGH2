@@ -1,0 +1,22 @@
+== title: golden 3 runs, candidate 3 runs -> FAIL
+   [ok] SET     89 imports in golden (all runs agree: True)
+   [!!] COUNTS  89 imports checked, 9 outside the band: KeDelayExecutionThread run1=2 golden[6..6]; KeDelayExecutionThread run2=2 golden[6..6]; KeDelayExecutionThread run3=2 golden[6..6]; MmQueryAddressProtect run1=24 golden[36..36]; MmQueryAddressProtect run2=24 golden[36..36]; MmQueryAddressProtect run3=24 golden[36..36]; XamInputGetCapabilities run1=2320 golden[1167..1169]; XamInputGetCapabilities run2=2316 golden[1167..1169]
+   [ok] ORDER   first-seen order ratio candidate>=0.978 vs golden-golden>=0.978
+   [ok] MAIN    main-thread prefix (1500 events) ratio candidate>=0.999 vs golden-golden>=0.999
+   [ok] RETURNS 35 of 89 imports have clean status returns in golden and were judged
+   (info) pseudo events in candidate: <mmio_load>=[2269, 2240, 2242], <mmio_store>=[11782, 11700, 11711]
+== autostart: golden 3 runs, candidate 3 runs -> FAIL
+   [ok] SET     98 imports in golden (all runs agree: True)
+   [!!] COUNTS  98 imports checked, 9 outside the band: KeDelayExecutionThread run1=2 golden[6..6]; KeDelayExecutionThread run2=2 golden[6..6]; KeDelayExecutionThread run3=2 golden[6..6]; MmQueryAddressProtect run1=24 golden[36..36]; MmQueryAddressProtect run2=24 golden[36..36]; MmQueryAddressProtect run3=24 golden[36..36]; XamInputGetCapabilities run1=5534 golden[2768..2771]; XamInputGetCapabilities run2=5524 golden[2768..2771]
+   [ok] ORDER   first-seen order ratio candidate>=0.980 vs golden-golden>=0.980
+   [ok] MAIN    main-thread prefix (1500 events) ratio candidate>=0.999 vs golden-golden>=0.999
+   [ok] RETURNS 37 of 98 imports have clean status returns in golden and were judged
+   (info) pseudo events in candidate: <mmio_load>=[4603, 4613, 4590], <mmio_store>=[35159, 35107, 35353]
+== normal: golden 3 runs, candidate 3 runs -> FAIL
+   [ok] SET     83 imports in golden (all runs agree: True)
+   [!!] COUNTS  83 imports checked, 3 outside the band: XamInputGetCapabilities run1=1778 golden[903..904]; XamInputGetCapabilities run2=1776 golden[903..904]; XamInputGetCapabilities run3=1782 golden[903..904]
+   [ok] ORDER   first-seen order ratio candidate>=0.976 vs golden-golden>=0.976
+   [ok] MAIN    main-thread prefix (1500 events) ratio candidate>=0.999 vs golden-golden>=0.999
+   [ok] RETURNS 36 of 83 imports have clean status returns in golden and were judged
+   (info) pseudo events in candidate: <mmio_load>=[1467, 1466, 1467], <mmio_store>=[2630, 2630, 2632]
+OVERALL: FAIL

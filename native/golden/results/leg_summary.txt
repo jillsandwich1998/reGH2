@@ -1,0 +1,13 @@
+== leg_title_1
+leg_title_1              gpu avg/max= 18/ 40% vram= 761MB | fps= 60.5 frames=  363 >20ms=   0 >25ms=  0 >33ms=  0 max=  18.1ms | skipped_draws=   0 pipelines=   0 underruns=0 | exit=-9 shm=0
+saves: UNCHANGED (B13EBABEBABEBABE)
+trace: leg_title_1.trace  2.8 MB  counts=True
+== leg_autostart_1
+leg_autostart_1          gpu avg/max= 61/ 85% vram=1134MB | fps= 60.3 frames= 2050 >20ms=  13 >25ms=  0 >33ms=  0 max=  23.5ms | skipped_draws=   0 pipelines=   0 underruns=0 | exit=-9 shm=0
+saves: UNCHANGED (B13EBABEBABEBABE)
+trace: leg_autostart_1.trace  5.1 MB  counts=True
+== leg_normal_1
+leg_normal_1             gpu avg/max=  6/ 15% vram= 732MB | fps= 60.2 frames=  722 >20ms=  14 >25ms=  0 >33ms=  0 max=  20.6ms | skipped_draws=   0 pipelines=   0 underruns=0 | exit=-9 shm=0
+saves: UNCHANGED (B13EBABEBABEBABE)
+trace: leg_normal_1.trace  2.7 MB  counts=True
+done

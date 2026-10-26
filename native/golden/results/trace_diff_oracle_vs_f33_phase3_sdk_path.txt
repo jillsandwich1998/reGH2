@@ -1,0 +1,25 @@
+== title: golden 3 runs, candidate 3 runs -> FAIL
+   [ok] SET     88 imports in golden (all runs agree: True)
+   [!!] COUNTS  88 imports checked, 9 outside the band: KeDelayExecutionThread run1=6 golden[2..2]; KeDelayExecutionThread run2=6 golden[2..2]; KeDelayExecutionThread run3=6 golden[2..2]; MmQueryAddressProtect run1=36 golden[24..24]; MmQueryAddressProtect run2=36 golden[24..24]; MmQueryAddressProtect run3=36 golden[24..24]; XamInputGetCapabilities run1=1149 golden[2320..2324]; XamInputGetCapabilities run2=1145 golden[2320..2324]
+   [ok] ORDER   first-seen order ratio candidate>=0.955 vs golden-golden>=1.000
+   [ok] MAIN    main-thread prefix (1500 events) ratio candidate>=0.989 vs golden-golden>=0.999
+   [ok] RETURNS 36 of 89 imports have clean status returns in golden and were judged
+   (info) not judged (--expect-diff): RtlNtStatusToDosError
+   (info) pseudo events in candidate: <mmio_load>=[2417, 2461, 2514], <mmio_store>=[11680, 11673, 11791], <resolve_indirect>=[11, 11, 11], RtlNtStatusToDosError=[2, 2, 2]
+== autostart: golden 3 runs, candidate 3 runs -> PASS
+   [ok] SET     97 imports in golden (all runs agree: True)
+   [ok] COUNTS  97 imports checked, 0 outside the band
+   [ok] ORDER   first-seen order ratio candidate>=0.959 vs golden-golden>=0.980
+   [ok] MAIN    main-thread prefix (1500 events) ratio candidate>=0.989 vs golden-golden>=0.999
+   [ok] RETURNS 37 of 98 imports have clean status returns in golden and were judged
+   (info) not judged (--expect-diff): RtlNtStatusToDosError
+   (info) pseudo events in candidate: <mmio_load>=[5806, 5723, 5684], <mmio_store>=[41950, 42431, 42060], <resolve_indirect>=[11, 11, 11], RtlNtStatusToDosError=[42, 42, 42]
+== normal: golden 3 runs, candidate 3 runs -> FAIL
+   [ok] SET     82 imports in golden (all runs agree: True)
+   [!!] COUNTS  82 imports checked, 3 outside the band: XamInputGetCapabilities run1=878 golden[1786..1790]; XamInputGetCapabilities run2=868 golden[1786..1790]; XamInputGetCapabilities run3=870 golden[1786..1790]
+   [ok] ORDER   first-seen order ratio candidate>=0.994 vs golden-golden>=1.000
+   [ok] MAIN    main-thread prefix (1500 events) ratio candidate>=0.989 vs golden-golden>=0.999
+   [ok] RETURNS 36 of 83 imports have clean status returns in golden and were judged
+   (info) not judged (--expect-diff): RtlNtStatusToDosError
+   (info) pseudo events in candidate: <mmio_load>=[1469, 1470, 1468], <mmio_store>=[2622, 2614, 2616], <resolve_indirect>=[9, 9, 9]
+OVERALL: FAIL

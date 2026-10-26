@@ -1,0 +1,23 @@
+{
+ "KeInitializeSemaphore (guest-memory object)": 1,
+ "KeReleaseSemaphore type5+runtime": 10138,
+ "KeResetEvent type0": 4,
+ "KeResetEvent type0+runtime": 6120,
+ "KeSetEvent type0+runtime": 6128,
+ "KeSetEvent type1": 2,
+ "KeSetEvent type1+runtime": 20314,
+ "KeWaitForMultipleObjects n=2 type=1 [type1+runtime,type0+runtime] infinite": 10137,
+ "KeWaitForMultipleObjects n=2 type=1 [type1,type0] infinite": 1,
+ "KeWaitForSingleObject type0 infinite": 2,
+ "KeWaitForSingleObject type0+runtime infinite": 6208,
+ "KeWaitForSingleObject type1 infinite": 3,
+ "KeWaitForSingleObject type1+runtime infinite": 10150,
+ "KeWaitForSingleObject type5+runtime infinite": 10139,
+ "NtReleaseSemaphore semaphore": 2,
+ "NtSetEvent event": 5393,
+ "NtWaitForSingleObjectEx event infinite": 4387,
+ "NtWaitForSingleObjectEx semaphore infinite": 3,
+ "NtWaitForSingleObjectEx thread infinite": 4,
+ "ObReferenceObjectByHandle thread": 9,
+ "ObReferenceObjectByHandle unknown": 2
+}

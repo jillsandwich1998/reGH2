@@ -1,0 +1,11 @@
+{
+ "seconds": 70.0,
+ "commits": 2362750,
+ "bad_containers": 0,
+ "stage_mismatch": 0,
+ "unregistered_objects": 0,
+ "unregistered_draws": 0,
+ "distinct_vs_ps_pairs": 89,
+ "vertex": {"created": 1283, "distinct_containers": 377, "distinct_containers_in_cache": 377, "bound_draws": 2362750, "registered_draws": 2362750, "cache_hit_draws": 2362750, "im_loads": 2245046, "im_load_address_ok": 2245046, "ucode_layout_ok": 2245046, "ucode_checked": 2245046, "ucode_identical": 0, "diff_words_buckets": {"1-2": 31864, "3-6": 613146, "7-18": 1600036}},
+ "pixel": {"created": 1284, "distinct_containers": 259, "distinct_containers_in_cache": 259, "bound_draws": 1959435, "registered_draws": 1959435, "cache_hit_draws": 1959435, "im_loads": 1958575, "im_load_address_ok": 1958575, "ucode_layout_ok": 1958575, "ucode_checked": 1958575, "ucode_identical": 1958575, "diff_words_buckets": {"0": 1958575}}
+}

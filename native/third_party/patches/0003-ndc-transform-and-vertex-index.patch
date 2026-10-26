@@ -1,0 +1,63 @@
+diff --git a/XenosRecomp/shader_common.h b/XenosRecomp/shader_common.h
+index 7de1c46..86e3a5f 100644
+--- a/XenosRecomp/shader_common.h
++++ b/XenosRecomp/shader_common.h
+@@ -28,7 +28,13 @@ struct PushConstants
+ 
+ #define g_Booleans                 vk::RawBufferLoad<uint>(g_PushConstants.SharedConstants + 256)
+ #define g_SwappedTexcoords         vk::RawBufferLoad<uint>(g_PushConstants.SharedConstants + 260)
++// GH2: the vertex shader's position reaches clip space as oPos.xy = oPos.xy * g_NdcScale + g_HalfPixelOffset * oPos.w (the half pixel slot holds the offset). The renderer sets
++// (1, -1) and 0 for draws that use the viewport transform and (2/width, -2/height) and (-1, 1) for draws that give window coordinates (PA_CL_VTE_CNTL scale/offset off: 2D,
++// screen-space vertices); y is negated because the Xenos' frames come out mirrored vertically otherwise.
+ #define g_HalfPixelOffset          vk::RawBufferLoad<float2>(g_PushConstants.SharedConstants + 264)
++#define g_NdcScale                 vk::RawBufferLoad<float2>(g_PushConstants.SharedConstants + 280)
++// GH2: r0.x of a Xenos vertex shader holds the vertex index (skinned meshes pick their bone set with it); the renderer rebases the indices of a draw, g_VertexIndexBase restores them
++#define g_VertexIndexBase          vk::RawBufferLoad<float>(g_PushConstants.SharedConstants + 288)
+ #define g_AlphaThreshold           vk::RawBufferLoad<float>(g_PushConstants.SharedConstants + 272)
+ 
+ [[vk::constant_id(0)]] const uint g_SpecConstants = 0;
+@@ -41,7 +47,9 @@ struct PushConstants
+     uint g_Booleans : packoffset(c16.x); \
+     uint g_SwappedTexcoords : packoffset(c16.y); \
+     float2 g_HalfPixelOffset : packoffset(c16.z); \
+-    float g_AlphaThreshold : packoffset(c17.x);
++    float g_AlphaThreshold : packoffset(c17.x); \
++    float2 g_NdcScale : packoffset(c17.z); \
++    float g_VertexIndexBase : packoffset(c18.x);
+ 
+ uint g_SpecConstants();
+ 
+diff --git a/XenosRecomp/shader_recompiler.cpp b/XenosRecomp/shader_recompiler.cpp
+index d0d029d..e788438 100644
+--- a/XenosRecomp/shader_recompiler.cpp
++++ b/XenosRecomp/shader_recompiler.cpp
+@@ -1349,6 +1349,8 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
+             out += "\tin uint iVertexId : SV_VertexID,\n";
+             out += "\tin uint iInstanceId : SV_InstanceID,\n";
+         }
++    #else
++        out += "\tin uint iVertexId : SV_VertexID,\n";   // GH2: r0.x = the vertex index
+     #endif
+ 
+         out += "\tout float4 oPos : SV_Position";
+@@ -1475,6 +1477,11 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
+             {
+                 out += "float4(iVertexId + g_IndexCount.x * iInstanceId, 0.0, 0.0, 0.0);\n";
+             }
++        #else
++            else if (!isPixelShader && i == 0)
++            {
++                out += "float4(float(iVertexId) + g_VertexIndexBase, 0.0, 0.0, 0.0);\n";   // GH2: r0.x is the vertex index
++            }
+         #endif
+             else
+             {
+@@ -1836,7 +1843,7 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
+                     if (!hasMtxProjection)
+                 #endif
+                     {
+-                        out += "\toPos.xy += g_HalfPixelOffset * oPos.w;\n";
++                        out += "\toPos.xy = oPos.xy * g_NdcScale + g_HalfPixelOffset * oPos.w;\n";
+                     }
+                 }
+ 

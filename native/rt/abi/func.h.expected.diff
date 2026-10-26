@@ -1,0 +1,13 @@
+--- sdk/rex/ppc/func.h
++++ shim/rex/ppc/func.h
+@@ -30,6 +30,9 @@
+ using PPCFunc = void(PPCContext& ctx, uint8_t* base);
+ 
++// GH2 isolation (the only change to this vendored file; see native/rt/abi/VENDORED.md): the indirect-call fallback is part of
++// the gh2abi contract instead of an SDK symbol. `rex::runtime` keeps the spelling that the generated code uses.
++#include <gh2abi/abi.h>
+ namespace rex::runtime {
+-PPCFunc* ResolveIndirectFunction(uint32_t guest_address);
++using ::gh2abi::ResolveIndirectFunction;
+ }  // namespace rex::runtime
+ 

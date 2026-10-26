@@ -1,0 +1,25 @@
+== title: golden 3 runs, candidate 3 runs -> PASS
+   [ok] SET     88 imports in golden (all runs agree: True)
+   [ok] COUNTS  88 imports checked, 0 outside the band
+   [ok] ORDER   first-seen order ratio candidate>=0.966 vs golden-golden>=1.000
+   [ok] MAIN    main-thread prefix (1500 events) ratio candidate>=0.993 vs golden-golden>=0.999
+   [ok] RETURNS 36 of 89 imports have clean status returns in golden and were judged
+   (info) not judged (--expect-diff): RtlNtStatusToDosError
+   (info) pseudo events in candidate: <mmio_load>=[2254, 2241, 2255], <mmio_store>=[11809, 11733, 11732], RtlNtStatusToDosError=[2, 2, 2]
+== autostart: golden 3 runs, candidate 3 runs -> PASS
+   [ok] SET     97 imports in golden (all runs agree: True)
+   [ok] COUNTS  97 imports checked, 0 outside the band
+   [ok] ORDER   first-seen order ratio candidate>=0.969 vs golden-golden>=0.980
+   [ok] MAIN    main-thread prefix (1500 events) ratio candidate>=0.993 vs golden-golden>=0.999
+   [ok] RETURNS 38 of 98 imports have clean status returns in golden and were judged
+   (info) not judged (--expect-diff): RtlNtStatusToDosError
+   (info) pseudo events in candidate: <mmio_load>=[4648, 4646, 4620], <mmio_store>=[35213, 35183, 35153], RtlNtStatusToDosError=[42, 42, 42]
+== normal: golden 3 runs, candidate 3 runs -> PASS
+   [ok] SET     82 imports in golden (all runs agree: True)
+   [ok] COUNTS  82 imports checked, 0 outside the band
+   [ok] ORDER   first-seen order ratio candidate>=0.994 vs golden-golden>=1.000
+   [ok] MAIN    main-thread prefix (1500 events) ratio candidate>=0.993 vs golden-golden>=0.999
+   [ok] RETURNS 36 of 83 imports have clean status returns in golden and were judged
+   (info) not judged (--expect-diff): RtlNtStatusToDosError
+   (info) pseudo events in candidate: <mmio_load>=[1465, 1467, 1470], <mmio_store>=[2628, 2628, 2636]
+OVERALL: PASS

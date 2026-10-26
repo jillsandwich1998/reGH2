@@ -1,0 +1,40 @@
+diff --git a/XenosRecomp/shader_common.h b/XenosRecomp/shader_common.h
+index 1c74034..7de1c46 100644
+--- a/XenosRecomp/shader_common.h
++++ b/XenosRecomp/shader_common.h
+@@ -143,6 +143,13 @@ float4 tfetch2DBicubic(uint resourceDescriptorIndex, uint samplerDescriptorIndex
+     return r;
+ }
+ 
++// GH2: a 1D fetch reads a texture that the host binds as a 2D texture one texel high (the recompiler makes <name>_Texture1DDescriptorIndex
++// an alias of <name>_Texture2DDescriptorIndex), sampled at the middle of its only row. This keeps the shared-constants layout unchanged.
++float4 tfetch1D(uint resourceDescriptorIndex, uint samplerDescriptorIndex, float texCoord)
++{
++    return g_Texture2DDescriptorHeap[resourceDescriptorIndex].Sample(g_SamplerDescriptorHeap[samplerDescriptorIndex], float2(texCoord, 0.5));
++}
++
+ float4 tfetch3D(uint resourceDescriptorIndex, uint samplerDescriptorIndex, float3 texCoord)
+ {
+     return g_Texture3DDescriptorHeap[resourceDescriptorIndex].Sample(g_SamplerDescriptorHeap[samplerDescriptorIndex], texCoord);
+diff --git a/XenosRecomp/shader_recompiler.cpp b/XenosRecomp/shader_recompiler.cpp
+index 698a418..d0d029d 100644
+--- a/XenosRecomp/shader_recompiler.cpp
++++ b/XenosRecomp/shader_recompiler.cpp
+@@ -1180,6 +1180,9 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
+             println("#define {}_SamplerDescriptorIndex vk::RawBufferLoad<uint>(g_PushConstants.SharedConstants + {})",
+                 constantName, std::size(TEXTURE_DIMENSIONS) * 64 + constantInfo->registerIndex * 4);
+ 
++            // GH2: 1D textures are bound as 2D textures one texel high (see tfetch1D in shader_common.h)
++            println("#define {0}_Texture1DDescriptorIndex {0}_Texture2DDescriptorIndex", constantName);
++
+             samplers.emplace(constantInfo->registerIndex, constantName);
+             break;
+         }
+@@ -1238,6 +1241,7 @@ void ShaderRecompiler::recompile(const uint8_t* shaderData, const std::string_vi
+ 
+             println("\tuint {}_SamplerDescriptorIndex : packoffset(c{}.{});",
+                 constantName, 4 * std::size(TEXTURE_DIMENSIONS) + constantInfo->registerIndex / 4, SWIZZLES[constantInfo->registerIndex % 4]);
++            println("#define {0}_Texture1DDescriptorIndex {0}_Texture2DDescriptorIndex", constantName);
+         }
+     }
+ 

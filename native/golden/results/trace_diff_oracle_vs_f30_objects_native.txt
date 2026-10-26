@@ -1,0 +1,9 @@
+== autostart: golden 3 runs, candidate 3 runs -> PASS
+   [ok] SET     97 imports in golden (all runs agree: True)
+   [ok] COUNTS  97 imports checked, 0 outside the band
+   [ok] ORDER   first-seen order ratio candidate>=0.969 vs golden-golden>=0.980
+   [ok] MAIN    main-thread prefix (1500 events) ratio candidate>=0.993 vs golden-golden>=0.999
+   [ok] RETURNS 38 of 98 imports have clean status returns in golden and were judged
+   (info) not judged (--expect-diff): RtlNtStatusToDosError
+   (info) pseudo events in candidate: <mmio_load>=[5821, 5715, 5708], <mmio_store>=[41583, 42261, 42364], RtlNtStatusToDosError=[42, 42, 42]
+OVERALL: PASS

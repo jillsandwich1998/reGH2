@@ -1,0 +1,14 @@
+F2.7 final (2026-10-24): every default native (--sync --objects --threads --main_thread --audio_pump --xam_input; --vfs, --arena, --heaps, --input_reader, --audio_output as before). Quick Play, 60 s.
+
+Golden harness (3 runs): fps 60.1 / 60.1 / 60.2, frames 2646 / 2643 / 2650, underruns 0, saves unchanged. The ~123 ms max= of two of the runs is the menu-transition hitch (see kernel/README.md).
+trace_diff vs the oracle re-recorded the same day (the previous autostart oracle is kept in work/analysis/golden/oracle_prev_autostart_0001/): trace_diff_oracle_vs_f32_all_native.txt -> PASS.
+Why the oracle was re-recorded: the FROZEN oracle binary itself now gives XamInputGetCapabilities ~3355 (was ~6740), KeDelayExecutionThread 6 (was 2), MmQueryAddressProtect 36 (was 24): a second
+guest user stopped being reported connected after the first recording (environment), reproduced with no code of ours.
+
+Counters of a 50 s window (objects/f32_all_native_counters.json): 12 native threads created (main, audio pump, 10 of the game), 4 finished, 3 self-suspends, 14 resumes, 6 delays,
+~29 k event sets, ~37 k waits, 0 forwarded to the runtime.
+
+Audio (pump native): 9 377 frames in 50 s = 187.5/s, 0 underruns, 0 dropped; captured from PipeWire: levels within 0.5 dB of the runtime's pump, never silent. Not listened to.
+Input (uinput injector, song, delay 24 s, 20 s of presses, focus ignored): 118 injected / 118 seen / 0 missed, press-to-guest p50 9.2 ms, p99 17.4-17.8 ms (x2 runs); runtime entries p50 8.9-9.2 ms.
+Window close (GH2_TEST_QUIT=14 -> OnClosing): exit code 0 in 0.0 s, 3 of 3, no crash text.
+Self-tests: gh2_sync_selftest, gh2_sync_selftest_tsan, gh2_thread_selftest PASS. check_isolation PASS.

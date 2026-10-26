@@ -1,0 +1,37 @@
+== iso_title_1
+iso_title_1              gpu avg/max= 16/ 43% vram= 767MB | fps= 60.3 frames=  362 >20ms=   0 >25ms=  0 >33ms=  0 max=  19.3ms | skipped_draws=   0 pipelines=   0 underruns=0 | exit=-9 shm=0
+saves: UNCHANGED (B13EBABEBABEBABE)
+trace: iso_title_1.trace  3.0 MB  counts=True
+== iso_title_2
+iso_title_2              gpu avg/max= 18/ 44% vram= 774MB | fps= 60.3 frames=  362 >20ms=   0 >25ms=  0 >33ms=  0 max=  19.4ms | skipped_draws=   0 pipelines=   0 underruns=0 | exit=-9 shm=0
+saves: UNCHANGED (B13EBABEBABEBABE)
+trace: iso_title_2.trace  3.0 MB  counts=True
+== iso_title_3
+iso_title_3              gpu avg/max= 18/ 44% vram= 772MB | fps= 60.5 frames=  363 >20ms=   0 >25ms=  0 >33ms=  0 max=  19.3ms | skipped_draws=   0 pipelines=   0 underruns=0 | exit=-9 shm=0
+saves: UNCHANGED (B13EBABEBABEBABE)
+trace: iso_title_3.trace  3.0 MB  counts=True
+== iso_autostart_1
+iso_autostart_1          gpu avg/max= 62/ 84% vram=1166MB | fps= 60.2 frames= 2047 >20ms=  16 >25ms=  1 >33ms=  0 max=  26.1ms | skipped_draws=   0 pipelines=   0 underruns=0 | exit=-9 shm=0
+saves: UNCHANGED (B13EBABEBABEBABE)
+trace: iso_autostart_1.trace  5.3 MB  counts=True
+== iso_autostart_2
+iso_autostart_2          gpu avg/max= 59/ 86% vram=1154MB | fps= 60.3 frames= 2050 >20ms=  12 >25ms=  0 >33ms=  0 max=  24.7ms | skipped_draws=   0 pipelines=   0 underruns=0 | exit=-9 shm=0
+saves: UNCHANGED (B13EBABEBABEBABE)
+trace: iso_autostart_2.trace  5.2 MB  counts=True
+== iso_autostart_3
+iso_autostart_3          gpu avg/max= 58/ 89% vram=1151MB | fps= 60.2 frames= 2047 >20ms=   7 >25ms=  1 >33ms=  0 max=  26.2ms | skipped_draws=   0 pipelines=   0 underruns=0 | exit=-9 shm=0
+saves: UNCHANGED (B13EBABEBABEBABE)
+trace: iso_autostart_3.trace  5.2 MB  counts=True
+== iso_normal_1
+iso_normal_1             gpu avg/max=  7/ 20% vram= 751MB | fps= 60.2 frames=  723 >20ms=  14 >25ms=  0 >33ms=  0 max=  20.3ms | skipped_draws=   0 pipelines=   0 underruns=0 | exit=-9 shm=0
+saves: UNCHANGED (B13EBABEBABEBABE)
+trace: iso_normal_1.trace  2.9 MB  counts=True
+== iso_normal_2
+iso_normal_2             gpu avg/max=  7/ 15% vram= 741MB | fps= 60.2 frames=  723 >20ms=  16 >25ms=  0 >33ms=  0 max=  20.7ms | skipped_draws=   0 pipelines=   0 underruns=0 | exit=-9 shm=0
+saves: UNCHANGED (B13EBABEBABEBABE)
+trace: iso_normal_2.trace  2.9 MB  counts=True
+== iso_normal_3
+iso_normal_3             gpu avg/max=  6/ 16% vram= 732MB | fps= 60.2 frames=  723 >20ms=  19 >25ms=  0 >33ms=  0 max=  21.3ms | skipped_draws=   0 pipelines=   0 underruns=0 | exit=-9 shm=0
+saves: UNCHANGED (B13EBABEBABEBABE)
+trace: iso_normal_3.trace  2.9 MB  counts=True
+done

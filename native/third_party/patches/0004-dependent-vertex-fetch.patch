@@ -1,0 +1,340 @@
+diff --git a/XenosRecomp/main.cpp b/XenosRecomp/main.cpp
+--- a/XenosRecomp/main.cpp
++++ b/XenosRecomp/main.cpp
+@@ -27,6 +27,7 @@
+     IDxcBlob* dxil = nullptr;
+     std::vector<uint8_t> spirv;
+     uint32_t specConstantsMask = 0;
++    uint32_t dependentFetchMask = 0;   // GH2: vertex elements read by dependent fetches
+ 
+     // GH2 (--emit): what the loose-file cache and its index need
+     size_t dataSize = 0;            // container size, the span that is hashed
+@@ -155,6 +156,7 @@
+                 recompiler.recompile(shader.data, include);
+ 
+                 shader.specConstantsMask = recompiler.specConstantsMask;
++                shader.dependentFetchMask = recompiler.dependentFetchMask;
+                 shader.isPixelShader = recompiler.isPixelShader;
+                 if (emitDir != nullptr)
+                     shader.hlsl = recompiler.out;
+@@ -194,7 +196,7 @@
+         if (emitDir != nullptr)
+         {
+             std::filesystem::create_directories(emitDir);
+-            std::string index = "hash\tstage\tstatus\tspec_mask\tcontainer_bytes\thlsl_bytes\tspirv_bytes\toccurrences\tsource\terror\n";
++            std::string index = "hash\tstage\tstatus\tspec_mask\tdep_mask\tcontainer_bytes\thlsl_bytes\tspirv_bytes\toccurrences\tsource\terror\n";
+             size_t failed = 0;
+             for (auto& [hash, shader] : shaders)
+             {
+@@ -205,8 +207,8 @@
+                 else
+                     ++failed;
+ 
+-                index += fmt::format("{:016X}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n", hash, shader.isPixelShader ? "ps" : "vs",
+-                    shader.error.empty() ? "ok" : "dxc_error", shader.specConstantsMask, shader.dataSize, shader.hlsl.size(),
++                index += fmt::format("{:016X}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n", hash, shader.isPixelShader ? "ps" : "vs",
++                    shader.error.empty() ? "ok" : "dxc_error", shader.specConstantsMask, shader.dependentFetchMask, shader.dataSize, shader.hlsl.size(),
+                     shader.spirvRaw.size(), shader.occurrences, shader.source, oneLine(shader.error));
+             }
+             writeAllBytes(fmt::format("{}/index.tsv", emitDir).c_str(), index.data(), index.size());
+diff --git a/XenosRecomp/shader_common.h b/XenosRecomp/shader_common.h
+--- a/XenosRecomp/shader_common.h
++++ b/XenosRecomp/shader_common.h
+@@ -195,6 +195,148 @@
+     return (swappedTexcoords & (1ull << semanticIndex)) != 0 ? value.yxwz : value;
+ }
+ 
++#ifdef __spirv__
++// GH2: a vertex fetch whose index register the shader computed itself (multi-mesh draws: the vertex index selects an entry of one stream, that entry the vertex of another) cannot be
++// served by the input assembler. The renderer uploads the whole stream and describes it at SharedConstants + 320 + 16 * element (the element's position in the container's vertex
++// element table): u32 address low, u32 address high, u32 stride in bytes, u32 meta = Xenos vertex format | signed << 8 | integer << 9 | byte offset << 10. The bytes are already
++// endian swapped; the formats decode the way Vulkan would read the same bytes as vertex attributes.
++struct DependentFetch
++{
++    uint64_t address;
++    uint stride;
++    uint format;
++    bool isSigned;
++    bool isInteger;
++    uint offset;
++};
++
++DependentFetch getDependentFetch(uint element)
++{
++    uint64_t at = g_PushConstants.SharedConstants + 320 + element * 16;
++    DependentFetch f;
++    f.address = uint64_t(vk::RawBufferLoad<uint>(at)) | (uint64_t(vk::RawBufferLoad<uint>(at + 4)) << 32);
++    f.stride = vk::RawBufferLoad<uint>(at + 8);
++    uint meta = vk::RawBufferLoad<uint>(at + 12);
++    f.format = meta & 0xFF;
++    f.isSigned = ((meta >> 8) & 1) != 0;
++    f.isInteger = ((meta >> 9) & 1) != 0;
++    f.offset = meta >> 10;
++    return f;
++}
++
++uint dependentWord(DependentFetch f, uint index, uint word)
++{
++    return vk::RawBufferLoad<uint>(f.address + uint64_t(index) * f.stride + f.offset + word * 4);
++}
++
++float2 unpackHalf2(uint w)
++{
++    return float2(f16tof32(w & 0xFFFF), f16tof32(w >> 16));
++}
++
++float unpack16(uint v, bool isSigned, bool isInteger)
++{
++    float x = isSigned ? float(int(v << 16) >> 16) : float(v);
++    return isInteger ? x : (isSigned ? max(x / 32767.0, -1.0) : x / 65535.0);
++}
++
++float unpack8(uint v, bool isSigned, bool isInteger)
++{
++    float x = isSigned ? float(int(v << 24) >> 24) : float(v);
++    return isInteger ? x : (isSigned ? max(x / 127.0, -1.0) : x / 255.0);
++}
++
++float4 vertexFetchDependent(uint element, uint index)
++{
++    DependentFetch f = getDependentFetch(element);
++    float4 r = float4(0.0, 0.0, 0.0, 1.0);
++    switch (f.format)
++    {
++    case 36:
++        r.x = asfloat(dependentWord(f, index, 0));
++        break;
++    case 37:
++        r.xy = asfloat(uint2(dependentWord(f, index, 0), dependentWord(f, index, 1)));
++        break;
++    case 57:
++        r.xyz = asfloat(uint3(dependentWord(f, index, 0), dependentWord(f, index, 1), dependentWord(f, index, 2)));
++        break;
++    case 38:
++        r = asfloat(uint4(dependentWord(f, index, 0), dependentWord(f, index, 1), dependentWord(f, index, 2), dependentWord(f, index, 3)));
++        break;
++    case 33:
++        r.x = f.isSigned ? float(int(dependentWord(f, index, 0))) : float(dependentWord(f, index, 0));
++        break;
++    case 34:
++        r.x = f.isSigned ? float(int(dependentWord(f, index, 0))) : float(dependentWord(f, index, 0));
++        r.y = f.isSigned ? float(int(dependentWord(f, index, 1))) : float(dependentWord(f, index, 1));
++        break;
++    case 35:
++        for (uint i = 0; i < 4; i++)
++        {
++            uint w = dependentWord(f, index, i);
++            r[i] = f.isSigned ? float(int(w)) : float(w);
++        }
++        break;
++    case 31:
++        r.xy = unpackHalf2(dependentWord(f, index, 0));
++        break;
++    case 32:
++        r = float4(unpackHalf2(dependentWord(f, index, 0)), unpackHalf2(dependentWord(f, index, 1)));
++        break;
++    case 25:
++    {
++        uint w = dependentWord(f, index, 0);
++        r.xy = float2(unpack16(w & 0xFFFF, f.isSigned, f.isInteger), unpack16(w >> 16, f.isSigned, f.isInteger));
++        break;
++    }
++    case 26:
++    {
++        uint w0 = dependentWord(f, index, 0), w1 = dependentWord(f, index, 1);
++        r = float4(unpack16(w0 & 0xFFFF, f.isSigned, f.isInteger), unpack16(w0 >> 16, f.isSigned, f.isInteger), unpack16(w1 & 0xFFFF, f.isSigned, f.isInteger), unpack16(w1 >> 16, f.isSigned, f.isInteger));
++        break;
++    }
++    case 6:
++    {
++        uint w = dependentWord(f, index, 0);
++        r = float4(unpack8(w & 0xFF, f.isSigned, f.isInteger), unpack8((w >> 8) & 0xFF, f.isSigned, f.isInteger), unpack8((w >> 16) & 0xFF, f.isSigned, f.isInteger), unpack8(w >> 24, f.isSigned, f.isInteger));
++        break;
++    }
++    case 7:
++    {
++        uint w = dependentWord(f, index, 0);
++        float3 c = float3(w & 0x3FF, (w >> 10) & 0x3FF, (w >> 20) & 0x3FF);
++        float a = float(w >> 30);
++        if (f.isSigned)
++            r = float4(max(float3(int3(int3(c) << 22) >> 22) / 511.0, -1.0), max(float(int(w >> 30 << 30) >> 30), -1.0));
++        else
++            r = float4(c / 1023.0, a / 3.0);
++        break;
++    }
++    default:
++        break;
++    }
++    return r;
++}
++
++// the same fetch for the inputs the translated shader reads as raw words (normals, tangents, binormals)
++uint4 vertexFetchDependentU(uint element, uint index)
++{
++    DependentFetch f = getDependentFetch(element);
++    uint4 r = uint4(0, 0, 0, 1);
++    uint words = 1;
++    if (f.format == 26 || f.format == 32 || f.format == 34 || f.format == 37)
++        words = 2;
++    else if (f.format == 57)
++        words = 3;
++    else if (f.format == 35 || f.format == 38)
++        words = 4;
++    for (uint i = 0; i < words; i++)
++        r[i] = dependentWord(f, index, i);
++    return r;
++}
++#endif
++
+ float4 cube(float4 value, inout CubeMapData cubeMapData)
+ {
+     uint index = cubeMapData.cubeMapIndex;
+diff --git a/XenosRecomp/shader_recompiler.cpp b/XenosRecomp/shader_recompiler.cpp
+--- a/XenosRecomp/shader_recompiler.cpp
++++ b/XenosRecomp/shader_recompiler.cpp
+@@ -158,6 +158,30 @@
+     }
+ }
+ 
++// GH2: has a statement before this point written this component of the register? (a vertex fetch indexed by such a register reads a stream the shader itself indexes)
++bool ShaderRecompiler::registerWritten(uint32_t reg, char component) const
++{
++    const std::string needle = fmt::format("r{}.", reg);
++    for (size_t at = out.find(needle); at != std::string::npos; at = out.find(needle, at + 1))
++    {
++        size_t line = at;
++        while (line > 0 && (out[line - 1] == '\t' || out[line - 1] == ' '))
++            --line;
++        if (line != 0 && out[line - 1] != '\n')
++            continue;   // not the start of a statement: a read
++        size_t c = at + needle.size();
++        bool hasComponent = false;
++        while (c < out.size() && (out[c] == 'x' || out[c] == 'y' || out[c] == 'z' || out[c] == 'w'))
++        {
++            hasComponent = hasComponent || out[c] == component;
++            ++c;
++        }
++        if (hasComponent && out.compare(c, 3, " = ") == 0)
++            return true;
++    }
++    return false;
++}
++
+ void ShaderRecompiler::recompile(const VertexFetchInstruction& instr, uint32_t address)
+ {
+     if (instr.isPredicated)
+@@ -170,16 +194,35 @@
+         ++indentation;
+     }
+ 
++    auto findResult = vertexElements.find(address);
++    assert(findResult != vertexElements.end());
++    const DeclUsage usage = findResult->second.usage;
++
++    // GH2: a mini fetch reads with the index of the full fetch before it
++    bool dependent = instr.isMiniFetch ? lastFetchDependent : registerWritten(instr.srcRegister, SWIZZLES[instr.srcSwizzle]);
++    const uint32_t element = vertexElementOrder.at(address);
++    if (dependent && (element >= 8 || usage == DeclUsage::BlendIndices))
++    {
++        fmt::println(stderr, "GH2: dependent vertex fetch at {} not supported (element {} usage {}): read as an input", address, element, uint32_t(usage));
++        dependent = false;
++    }
++    lastFetchDependent = dependent;
++
++    if (dependent && !instr.isMiniFetch)
++    {
++        indent();
++        print("dfIndex = uint(max(floor(r{}.{}{}), 0.0));\n", uint32_t(instr.srcRegister), SWIZZLES[instr.srcSwizzle], instr.isIndexRounded ? " + 0.5" : "");
++    }
++    if (dependent)
++        dependentFetchMask |= 1u << element;
++
+     indent();
+     print("r{}.", instr.dstRegister);
+     printDstSwizzle(instr.dstSwizzle, false);
+ 
+     out += " = ";
+ 
+-    auto findResult = vertexElements.find(address);
+-    assert(findResult != vertexElements.end());
+-
+-    switch (findResult->second.usage)
++    switch (usage)
+     {
+     case DeclUsage::Normal:
+     case DeclUsage::Tangent:
+@@ -193,9 +236,14 @@
+         break;
+     }
+ 
+-    print("i{}{}", USAGE_VARIABLES[uint32_t(findResult->second.usage)], uint32_t(findResult->second.usageIndex));
++    if (!dependent)
++        print("i{}{}", USAGE_VARIABLES[uint32_t(usage)], uint32_t(findResult->second.usageIndex));
++    else if (usage == DeclUsage::Normal || usage == DeclUsage::Tangent || usage == DeclUsage::Binormal)
++        print("vertexFetchDependentU({}, dfIndex)", element);
++    else
++        print("vertexFetchDependent({}, dfIndex)", element);
+ 
+-    switch (findResult->second.usage)
++    switch (usage)
+     {
+     case DeclUsage::Normal:
+     case DeclUsage::Tangent:
+@@ -1326,6 +1374,7 @@
+             }
+         #endif
+ 
++            const size_t declarationStart = out.size();
+             out += '\t';
+ 
+             for (auto& usageLocation : USAGE_LOCATIONS)
+@@ -1341,6 +1390,8 @@
+                 uint32_t(vertexElement.usageIndex), USAGE_SEMANTICS[uint32_t(vertexElement.usage)]);
+ 
+             vertexElements.emplace(uint32_t(vertexElement.address), vertexElement);
++            vertexElementOrder.emplace(uint32_t(vertexElement.address), i);   // GH2
++            vertexElementDeclarations.push_back(out.substr(declarationStart));
+         }
+ 
+     #ifdef UNLEASHED_RECOMP
+@@ -1491,6 +1542,8 @@
+     }
+ 
+     out += "\tint a0 = 0;\n";
++    if (!isPixelShader)
++        out += "\tuint dfIndex = 0;\n";   // GH2: index of a dependent vertex fetch
+     out += "\tint aL = 0;\n";
+     out += "\tbool p0 = false;\n";
+     out += "\tfloat ps = 0.0;\n";
+@@ -1896,4 +1949,15 @@
+ #endif
+ 
+     out += "}";
++
++    // GH2: the elements that are only read through dependent fetches are not inputs of the shader
++    for (uint32_t i = 0; i < vertexElementDeclarations.size(); i++)
++    {
++        if ((dependentFetchMask >> i) & 1)
++        {
++            const size_t at = out.find(vertexElementDeclarations[i]);
++            if (at != std::string::npos)
++                out.erase(at, vertexElementDeclarations[i].size());
++        }
++    }
+ }
+diff --git a/XenosRecomp/shader_recompiler.h b/XenosRecomp/shader_recompiler.h
+--- a/XenosRecomp/shader_recompiler.h
++++ b/XenosRecomp/shader_recompiler.h
+@@ -33,6 +33,12 @@
+     std::unordered_map<uint32_t, const char*> samplers;
+     std::unordered_map<uint32_t, uint32_t> ifEndLabels;
+     uint32_t specConstantsMask = 0;
++    // GH2: vertex fetches whose index register the shader wrote itself read their stream with vertexFetchDependent (shader_common.h); bit i = the i-th element of the container's table
++    uint32_t dependentFetchMask = 0;
++    bool lastFetchDependent = false;
++    std::unordered_map<uint32_t, uint32_t> vertexElementOrder;   // fetch address -> position in the container's element table
++    std::vector<std::string> vertexElementDeclarations;          // the signature line of each element (dropped for dependent ones)
++    bool registerWritten(uint32_t reg, char component) const;
+ 
+ #ifdef UNLEASHED_RECOMP
+     bool hasMtxProjection = false;

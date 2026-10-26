@@ -1,0 +1,183 @@
+diff --git a/XenosRecomp/dxc_compiler.cpp b/XenosRecomp/dxc_compiler.cpp
+index fcbc43a..99999d2 100644
+--- a/XenosRecomp/dxc_compiler.cpp
++++ b/XenosRecomp/dxc_compiler.cpp
+@@ -11,7 +11,8 @@ DxcCompiler::~DxcCompiler()
+     dxcCompiler->Release();
+ }
+ 
+-IDxcBlob* DxcCompiler::compile(const std::string& shaderSource, bool compilePixelShader, bool compileLibrary, bool compileSpirv)
++IDxcBlob* DxcCompiler::compile(const std::string& shaderSource, bool compilePixelShader, bool compileLibrary, bool compileSpirv,
++    std::string* errorOut)
+ {
+     DxcBuffer source{};
+     source.Ptr = shaderSource.c_str();
+@@ -78,7 +79,10 @@ IDxcBlob* DxcCompiler::compile(const std::string& shaderSource, bool compilePixe
+                 hr = result->GetOutput(DXC_OUT_ERRORS, IID_PPV_ARGS(&errors), nullptr);
+                 assert(SUCCEEDED(hr) && errors != nullptr);
+ 
+-                fputs(errors->GetStringPointer(), stderr);
++                if (errorOut != nullptr)
++                    *errorOut += errors->GetStringPointer();
++                else
++                    fputs(errors->GetStringPointer(), stderr);
+ 
+                 errors->Release();
+             }
+diff --git a/XenosRecomp/dxc_compiler.h b/XenosRecomp/dxc_compiler.h
+index d49bd32..652eaf2 100644
+--- a/XenosRecomp/dxc_compiler.h
++++ b/XenosRecomp/dxc_compiler.h
+@@ -7,5 +7,6 @@ struct DxcCompiler
+     DxcCompiler();
+     ~DxcCompiler();
+ 
+-    IDxcBlob* compile(const std::string& shaderSource, bool compilePixelShader, bool compileLibrary, bool compileSpirv);
++    IDxcBlob* compile(const std::string& shaderSource, bool compilePixelShader, bool compileLibrary, bool compileSpirv,
++        std::string* errorOut = nullptr); // GH2: when errorOut is given the compiler messages go there instead of stderr
+ };
+diff --git a/XenosRecomp/main.cpp b/XenosRecomp/main.cpp
+index d015145..1000048 100644
+--- a/XenosRecomp/main.cpp
++++ b/XenosRecomp/main.cpp
+@@ -27,18 +27,46 @@ struct RecompiledShader
+     IDxcBlob* dxil = nullptr;
+     std::vector<uint8_t> spirv;
+     uint32_t specConstantsMask = 0;
++
++    // GH2 (--emit): what the loose-file cache and its index need
++    size_t dataSize = 0;            // container size, the span that is hashed
++    std::string source;             // first input file that holds this container
++    uint32_t occurrences = 0;       // how many times the same container was found in the input
++    bool isPixelShader = false;
++    std::string hlsl;
++    std::vector<uint8_t> spirvRaw;  // dxc's output, before smol-v encoding
++    std::string error;              // empty = compiled; otherwise the compiler's message
+ };
+ 
++static std::string oneLine(std::string s, size_t maxLength = 300)
++{
++    for (char& c : s)
++        if (c == '\t' || c == '\n' || c == '\r')
++            c = ' ';
++    if (s.size() > maxLength)
++        s.resize(maxLength);
++    return s;
++}
++
+ int main(int argc, char** argv)
+ {
+ #ifndef XENOS_RECOMP_INPUT
+     if (argc < 4)
+     {
+-        printf("Usage: XenosRecomp [input path] [output path] [shader common header file path]");
++        printf("Usage: XenosRecomp [input path] [output path] [shader common header file path] [--emit DIR]\n"
++               "  --emit DIR  (GH2) also write DIR/<hash>.hlsl, DIR/<hash>.spv and DIR/index.tsv, and keep going when DXC rejects a\n"
++               "              shader (its message goes to the index). With output path - no shader_cache.cpp is written.\n");
+         return 0;
+     }
+ #endif
+ 
++    const char* emitDir = nullptr;
++    for (int i = 4; i + 1 < argc; ++i)
++    {
++        if (strcmp(argv[i], "--emit") == 0)
++            emitDir = argv[i + 1];
++    }
++
+     const char* input =
+ #ifdef XENOS_RECOMP_INPUT 
+         XENOS_RECOMP_INPUT
+@@ -98,8 +126,11 @@ int main(int argc, char** argv)
+                     if (shader.second)
+                     {
+                         shader.first->second.data = fileData.get() + i;
++                        shader.first->second.dataSize = dataSize;
++                        shader.first->second.source = file.path().filename().string();
+                         foundAny = true;
+                     }
++                    ++shader.first->second.occurrences;
+ 
+                     i += dataSize;
+                 }
+@@ -124,6 +155,9 @@ int main(int argc, char** argv)
+                 recompiler.recompile(shader.data, include);
+ 
+                 shader.specConstantsMask = recompiler.specConstantsMask;
++                shader.isPixelShader = recompiler.isPixelShader;
++                if (emitDir != nullptr)
++                    shader.hlsl = recompiler.out;
+ 
+                 thread_local DxcCompiler dxcCompiler;
+ 
+@@ -133,19 +167,55 @@ int main(int argc, char** argv)
+                 assert(*(reinterpret_cast<uint32_t *>(shader.dxil->GetBufferPointer()) + 1) != 0 && "DXIL was not signed properly!");
+ #endif
+ 
+-                IDxcBlob* spirv = dxcCompiler.compile(recompiler.out, recompiler.isPixelShader, false, true);
+-                assert(spirv != nullptr);
++                IDxcBlob* spirv = dxcCompiler.compile(recompiler.out, recompiler.isPixelShader, false, true, &shader.error);
++                if (spirv != nullptr)
++                {
++                    if (emitDir != nullptr)
++                    {
++                        shader.spirvRaw.assign(reinterpret_cast<const uint8_t*>(spirv->GetBufferPointer()),
++                            reinterpret_cast<const uint8_t*>(spirv->GetBufferPointer()) + spirv->GetBufferSize());
++                    }
+ 
+-                bool result = smolv::Encode(spirv->GetBufferPointer(), spirv->GetBufferSize(), shader.spirv, smolv::kEncodeFlagStripDebugInfo);
+-                assert(result);
++                    bool result = smolv::Encode(spirv->GetBufferPointer(), spirv->GetBufferSize(), shader.spirv, smolv::kEncodeFlagStripDebugInfo);
++                    assert(result);
+ 
+-                spirv->Release();
++                    spirv->Release();
++                }
++                else if (shader.error.empty())
++                {
++                    shader.error = "DXC returned no object";
++                }
+ 
+                 size_t currentProgress = ++progress;
+                 if ((currentProgress % 10) == 0 || (currentProgress == shaders.size() - 1))
+                     fmt::println("Recompiling shaders... {}%", currentProgress / float(shaders.size()) * 100.0f);
+             });
+ 
++        if (emitDir != nullptr)
++        {
++            std::filesystem::create_directories(emitDir);
++            std::string index = "hash\tstage\tstatus\tspec_mask\tcontainer_bytes\thlsl_bytes\tspirv_bytes\toccurrences\tsource\terror\n";
++            size_t failed = 0;
++            for (auto& [hash, shader] : shaders)
++            {
++                const std::string base = fmt::format("{}/{:016X}", emitDir, hash);
++                writeAllBytes((base + ".hlsl").c_str(), shader.hlsl.data(), shader.hlsl.size());
++                if (shader.error.empty())
++                    writeAllBytes((base + ".spv").c_str(), shader.spirvRaw.data(), shader.spirvRaw.size());
++                else
++                    ++failed;
++
++                index += fmt::format("{:016X}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n", hash, shader.isPixelShader ? "ps" : "vs",
++                    shader.error.empty() ? "ok" : "dxc_error", shader.specConstantsMask, shader.dataSize, shader.hlsl.size(),
++                    shader.spirvRaw.size(), shader.occurrences, shader.source, oneLine(shader.error));
++            }
++            writeAllBytes(fmt::format("{}/index.tsv", emitDir).c_str(), index.data(), index.size());
++            fmt::println("Emitted {} shaders to {} ({} rejected by DXC)", shaders.size(), emitDir, failed);
++        }
++
++        if (strcmp(output, "-") == 0)
++            return 0;
++
+         fmt::println("Creating shader cache...");
+ 
+         StringBuffer f;
+@@ -157,6 +227,9 @@ int main(int argc, char** argv)
+ 
+         for (auto& [hash, shader] : shaders)
+         {
++            if (!shader.error.empty())
++                continue;
++
+             f.println("\t{{ 0x{:X}, {}, {}, {}, {}, {} }},",
+                 hash, dxil.size(), (shader.dxil != nullptr) ? shader.dxil->GetBufferSize() : 0, spirv.size(), shader.spirv.size(), shader.specConstantsMask);
+ 

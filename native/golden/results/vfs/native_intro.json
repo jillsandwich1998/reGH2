@@ -1,0 +1,17 @@
+{
+ "seconds": 30.0,
+ "mode": "native",
+ "creates": 5, "creates_claimed": 5, "creates_native": 5, "creates_forwarded": 0, "closes": 2,
+ "reads": 278, "reads_compared": 0, "bytes_compared": 0, "read_mismatches": 0, "read_status_mismatches": 0, "reads_unmapped": 0,
+ "reads_with_event": 211, "reads_with_apc": 0, "reads_at_own_position": 0, "reads_native": 278, "bytes_native": 32261590,
+ "reads_pending": 0, "pending_compared": 0, "pending_lost": 0, "pending_max_ms": 0,
+ "queries": 4, "queries_native": 4, "query_mismatches": 0, "queries_unmapped": 0,
+ "query_classes": {"34": 4},
+ "unclaimed_paths_total": 0,
+ "unclaimed_paths": [],
+ "files": [
+  {"path": "d:\\gen\\main.hdr", "size": 411094, "opens": 2, "reads": 5, "bytes": 542166},
+  {"path": "d:\\gen\\main_0.ark", "size": 2112260247, "opens": 1, "reads": 62, "bytes": 4063232},
+  {"path": "d:\\videos\\intro.wmv", "size": 18869640, "opens": 2, "reads": 211, "bytes": 27656192}
+ ]
+}

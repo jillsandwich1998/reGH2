@@ -1,0 +1,37 @@
+== f27n_title_1
+f27n_title_1             gpu avg/max= 24/ 46% vram= 820MB | fps= 60.2 frames=  361 >20ms=   0 >25ms=  0 >33ms=  0 max=  18.6ms | skipped_draws=   0 pipelines=   0 underruns=0 | exit=-9 shm=0
+saves: UNCHANGED (B13EBABEBABEBABE)
+trace: f27n_title_1.trace  3.1 MB  counts=True
+== f27n_title_2
+f27n_title_2             gpu avg/max= 20/ 39% vram= 817MB | fps= 60.3 frames=  362 >20ms=   0 >25ms=  0 >33ms=  0 max=  19.2ms | skipped_draws=   0 pipelines=   0 underruns=0 | exit=-9 shm=0
+saves: UNCHANGED (B13EBABEBABEBABE)
+trace: f27n_title_2.trace  3.0 MB  counts=True
+== f27n_title_3
+f27n_title_3             gpu avg/max= 17/ 46% vram= 820MB | fps= 60.5 frames=  363 >20ms=   0 >25ms=  0 >33ms=  0 max=  18.9ms | skipped_draws=   0 pipelines=   0 underruns=0 | exit=-9 shm=0
+saves: UNCHANGED (B13EBABEBABEBABE)
+trace: f27n_title_3.trace  3.1 MB  counts=True
+== f27n_autostart_1
+f27n_autostart_1         gpu avg/max= 56/ 91% vram=1195MB | fps= 60.2 frames= 2048 >20ms=  11 >25ms=  0 >33ms=  0 max=  24.1ms | skipped_draws=   0 pipelines=   0 underruns=0 | exit=-9 shm=0
+saves: UNCHANGED (B13EBABEBABEBABE)
+trace: f27n_autostart_1.trace  5.2 MB  counts=True
+== f27n_autostart_2
+f27n_autostart_2         gpu avg/max= 58/ 84% vram=1188MB | fps= 60.2 frames= 2046 >20ms=  10 >25ms=  0 >33ms=  0 max=  24.5ms | skipped_draws=   0 pipelines=   0 underruns=0 | exit=-9 shm=0
+saves: UNCHANGED (B13EBABEBABEBABE)
+trace: f27n_autostart_2.trace  5.2 MB  counts=True
+== f27n_autostart_3
+f27n_autostart_3         gpu avg/max= 59/ 85% vram=1221MB | fps= 60.3 frames= 2050 >20ms=  12 >25ms=  1 >33ms=  0 max=  26.5ms | skipped_draws=   0 pipelines=   0 underruns=0 | exit=-9 shm=0
+saves: UNCHANGED (B13EBABEBABEBABE)
+trace: f27n_autostart_3.trace  5.2 MB  counts=True
+== f27n_normal_1
+f27n_normal_1            gpu avg/max=  7/ 14% vram= 814MB | fps= 60.2 frames=  723 >20ms=  13 >25ms=  0 >33ms=  0 max=  20.3ms | skipped_draws=   0 pipelines=   0 underruns=0 | exit=-9 shm=0
+saves: UNCHANGED (B13EBABEBABEBABE)
+trace: f27n_normal_1.trace  2.9 MB  counts=True
+== f27n_normal_2
+f27n_normal_2            gpu avg/max=  8/ 17% vram= 813MB | fps= 60.2 frames=  723 >20ms=  13 >25ms=  0 >33ms=  0 max=  20.3ms | skipped_draws=   0 pipelines=   0 underruns=0 | exit=-9 shm=0
+saves: UNCHANGED (B13EBABEBABEBABE)
+trace: f27n_normal_2.trace  2.9 MB  counts=True
+== f27n_normal_3
+f27n_normal_3            gpu avg/max=  8/ 14% vram= 816MB | fps= 60.2 frames=  723 >20ms=  17 >25ms=  0 >33ms=  0 max=  20.3ms | skipped_draws=   0 pipelines=   0 underruns=0 | exit=-9 shm=0
+saves: UNCHANGED (B13EBABEBABEBABE)
+trace: f27n_normal_3.trace  2.9 MB  counts=True
+done

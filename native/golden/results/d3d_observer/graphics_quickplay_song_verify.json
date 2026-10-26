@@ -1,0 +1,339 @@
+{
+ "seconds": 110.1,
+ "commits": 3927951,
+ "bad_containers": 0,
+ "stage_mismatch": 0,
+ "unregistered_objects": 0,
+ "unregistered_draws": 0,
+ "distinct_vs_ps_pairs": 87,
+ "vertex": {"created": 1283, "distinct_containers": 377, "distinct_containers_in_cache": 377, "bound_draws": 3927951, "registered_draws": 3927951, "cache_hit_draws": 3927951, "im_loads": 3709073, "im_load_address_ok": 3709073, "ucode_layout_ok": 3709073, "ucode_checked": 3709073, "ucode_identical": 0, "diff_words_buckets": {"1-2": 57264, "3-6": 1016542, "7-18": 2635267}},
+ "pixel": {"created": 1284, "distinct_containers": 259, "distinct_containers_in_cache": 259, "bound_draws": 3221369, "registered_draws": 3221369, "cache_hit_draws": 3221369, "im_loads": 3220475, "im_load_address_ok": 3220475, "ucode_layout_ok": 3220475, "ucode_checked": 3220475, "ucode_identical": 3220475, "diff_words_buckets": {"0": 3220475}}
+ ,"graphics": {
+  "seconds": 110.05,
+  "verify": true,
+  "frames": 6491,
+  "calls": {
+    "SetVertexDeclaration": 3737057,
+    "SetFVF": 196199,
+    "CreateVertexDeclaration": 7,
+    "CreateVertexBuffer": 6058,
+    "CreateIndexBuffer": 2989,
+    "SetStreamSource": 7439005,
+    "SetIndices": 7290113,
+    "CreateTexture": 560,
+    "CreateTextureHeader": 568,
+    "CreateSurface": 27,
+    "SetTexture": 10314542,
+    "SetSamplerState": 913686,
+    "SetRenderTarget": 318650,
+    "SetDepthStencilSurface": 318650,
+    "Resolve": 262404,
+    "Clear": 172510,
+    "Swap": 6491,
+    "DrawVertices": 50083,
+    "DrawIndexedVertices": 3645054,
+    "DrawIndexedVerticesUP": 25140,
+    "BeginVertices": 207710,
+    "EndVertices": 42368,
+    "LockVertexBuffer": 117788,
+    "LockIndexBuffer": 3027,
+    "TextureLevelAddress": 2450
+  },
+  "sampler_state_calls_by_function": {
+    "823BF2F0": 307643,
+    "823BF3E0": 26,
+    "823BF478": 307643,
+    "823BF568": 26,
+    "823BF600": 26,
+    "823BF658": 26,
+    "823BF6F0": 26,
+    "823BF768": 26,
+    "823BF810": 26,
+    "823BF8B0": 149018,
+    "823BF930": 149018,
+    "823BF9B0": 26,
+    "823BFA20": 26,
+    "823BFA70": 26,
+    "823BFAC0": 26,
+    "823BFB10": 26,
+    "823BFB68": 26,
+    "823BFBC0": 26
+  },
+  "draws": {
+    "total": 3927987,
+    "complete": 3927987,
+    "complete_percent": 100.00,
+    "by_function": {
+      "DrawVertices": 50083,
+      "DrawIndexedVertices": 3645054,
+      "DrawIndexedVerticesUP": 25140,
+      "BeginVertices": 207710
+    },
+    "missing": {
+      "pipeline": 0,
+      "vertex_declaration": 0,
+      "index_buffer": 0,
+      "vertex_stream": 0,
+      "texture": 0,
+      "render_target": 0
+    },
+    "without_color_target_depth_only": 723650,
+    "missing_texture_where_gpu_constant_is_also_invalid": 0,
+    "sampler_pointer_null_but_gpu_constant_still_the_previous_texture": 5882,
+    "missing_texture_examples": {
+    },
+    "vertex_fetch_slots_read": 5711088,
+    "vertex_fetch_slots_not_a_stream": 0,
+    "texture_fetch_slots_read": 8681060,
+    "texture_fetch_slots_beyond_samplers": 0,
+    "per_frame_max": 777,
+    "frames_without_draws": 48,
+    "inline_vertex_draws": 207710,
+    "inline_vertex_bytes": 25271832,
+    "draw_threads": "0"
+  },
+  "resources": {
+    "vertex_buffers": {
+      "registered": 4753,
+      "created_through_hooks": 6058,
+      "adopted_when_first_bound": 0,
+      "used_by_draws": 1215,
+      "wrong_type_when_bound": 0,
+      "invalid_header": 0,
+      "address_reused": 1306,
+      "lock_events": 116483,
+      "bytes": 9525260
+    },
+    "index_buffers": {
+      "registered": 2343,
+      "created_through_hooks": 2989,
+      "adopted_when_first_bound": 0,
+      "used_by_draws": 771,
+      "wrong_type_when_bound": 0,
+      "invalid_header": 0,
+      "address_reused": 643,
+      "lock_events": 2381,
+      "bytes": 875490
+    },
+    "textures": {
+      "registered": 549,
+      "created_through_hooks": 560,
+      "adopted_when_first_bound": 9,
+      "used_by_draws": 275,
+      "wrong_type_when_bound": 0,
+      "invalid_header": 0,
+      "address_reused": 23,
+      "lock_events": 2369,
+      "level0_bytes_estimate": 93079712,
+      "header_changes": 0,
+      "tiled": 544,
+      "formats": {
+        "24_8": 1,
+        "24_8_FLOAT": 1,
+        "8": 5,
+        "8_8_8_8": 18,
+        "DXN": 55,
+        "DXT1": 245,
+        "DXT4_5": 223,
+        "other": 1
+      },
+      "most_common_sizes": {
+        "512x512": 110,
+        "256x256": 85,
+        "128x128": 67,
+        "128x256": 54,
+        "64x64": 39,
+        "256x128": 33,
+        "32x32": 21,
+        "1024x1024": 21,
+        "1024x512": 20,
+        "512x256": 17,
+        "256x512": 12,
+        "512x1024": 10
+      }
+    },
+    "surfaces": {
+      "registered": 27,
+      "created_through_hooks": 27,
+      "adopted_when_first_bound": 0,
+      "used_by_draws": 0,
+      "wrong_type_when_bound": 0,
+      "invalid_header": 0,
+      "address_reused": 0,
+      "lock_events": 0
+    },
+    "declarations": {
+      "registered": 7,
+      "created_through_hooks": 7,
+      "adopted_when_first_bound": 1,
+      "used_by_draws": 0,
+      "wrong_type_when_bound": 0,
+      "invalid_header": 0,
+      "address_reused": 0,
+      "lock_events": 0,
+      "elements": 30
+    }
+  },
+  "bindings": {
+    "vertex_stream_binds": 7439005,
+    "vertex_stream_null_binds": 3,
+    "index_buffer_binds": 7290113,
+    "index_buffer_null_binds": 3645056,
+    "texture_binds": 10314542,
+    "texture_null_binds": 6869515,
+    "texture_header_changes_seen_at_draw": 0,
+    "render_target_binds": 318650,
+    "depth_stencil_binds": 318650,
+    "distinct_render_targets": 14,
+    "distinct_depth_stencil_surfaces": 10
+  },
+  "resolves": {
+    "total": 262404,
+    "to_registered_texture": 262404,
+    "with_render_target_bound": 228268,
+    "distinct_destination_textures": 17,
+    "per_frame_max": 51,
+    "by_flags": {
+      "0x0": 202498,
+      "0x4": 34136,
+      "0x14": 12884,
+      "0x300": 12886
+    }
+  },
+  "clears": {
+    "total": 172510,
+    "by_flags": {
+      "0x1": 6,
+      "0x30": 17068,
+      "0x3F": 155436
+    }
+  },
+  "swaps": {
+    "total": 6491,
+    "front_buffer_registered": 6491,
+    "distinct_front_buffers": 3
+  },
+  "cpu_access": {
+    "vertex_buffer_locks": 117788,
+    "distinct_vertex_buffers_locked": 4841,
+    "index_buffer_locks": 3027,
+    "distinct_index_buffers_locked": 2431,
+    "texture_level_address_queries": 2450,
+    "distinct_textures_queried": 541
+  },
+  "threads": {
+    "guest_thread_0": 35073095,
+    "guest_thread_1": 41
+  },
+  "verify": {
+    "draws_checked": 3927987,
+    "checks": 348472026,
+    "mismatches": 175,
+    "pm4_draws_parsed": 3688922,
+    "pm4_draws_skipped_inline_or_empty": 233142,
+    "pm4_draw_packets": 3688917,
+    "pm4_fetch_registers_compared": 76272984,
+    "resolves_checked": 262404,
+    "pm4_draws_skipped_segment_switch": 5923,
+    "resolve_destination_exactly_the_texture_base": 150640,
+    "resolves_to_a_mip_level_above_0": 111744,
+    "by_check": {
+      "device.vertex_declaration": {
+        "checks": 3927987,
+        "mismatches": 0
+      },
+      "device.index_buffer": {
+        "checks": 3927987,
+        "mismatches": 0
+      },
+      "device.render_target": {
+        "checks": 15711948,
+        "mismatches": 0
+      },
+      "device.depth_stencil": {
+        "checks": 3927987,
+        "mismatches": 0
+      },
+      "device.stream_vertex_buffer": {
+        "checks": 62847792,
+        "mismatches": 0
+      },
+      "device.stream_stride": {
+        "checks": 11774600,
+        "mismatches": 0
+      },
+      "device.texture": {
+        "checks": 102127662,
+        "mismatches": 0
+      },
+      "shadow.texture_fetch0": {
+        "checks": 8675178,
+        "mismatches": 0
+      },
+      "shadow.texture_fetch1_base_format": {
+        "checks": 8675178,
+        "mismatches": 0
+      },
+      "shadow.texture_fetch2_size": {
+        "checks": 8675178,
+        "mismatches": 0
+      },
+      "shadow.texture_fetch5_mip_address": {
+        "checks": 8675178,
+        "mismatches": 0
+      },
+      "shadow.vertex_fetch_address": {
+        "checks": 5478238,
+        "mismatches": 0
+      },
+      "shadow.vertex_fetch_size": {
+        "checks": 5478238,
+        "mismatches": 0
+      },
+      "pm4.draw_primitive": {
+        "checks": 3688917,
+        "mismatches": 0
+      },
+      "pm4.draw_count": {
+        "checks": 3688917,
+        "mismatches": 0
+      },
+      "pm4.draw_source": {
+        "checks": 3688917,
+        "mismatches": 0
+      },
+      "pm4.draw_dma_base": {
+        "checks": 3638834,
+        "mismatches": 0
+      },
+      "pm4.draw_dma_size": {
+        "checks": 3638834,
+        "mismatches": 0
+      },
+      "pm4.draw_packet_present": {
+        "checks": 3688922,
+        "mismatches": 5
+      },
+      "pm4.fetch_register_equals_shadow": {
+        "checks": 76272984,
+        "mismatches": 4
+      },
+      "pm4.resolve_destination_equals_texture": {
+        "checks": 262550,
+        "mismatches": 166
+      }
+    },
+    "first_mismatches": {
+      "0": "pm4.draw_packet_present: tracked/emitted 00000000, expected 00000001 (detail 0)",
+      "1": "pm4.draw_packet_present: tracked/emitted 00000000, expected 00000001 (detail 0)",
+      "2": "pm4.draw_packet_present: tracked/emitted 00000000, expected 00000001 (detail 0)",
+      "3": "pm4.fetch_register_equals_shadow: tracked/emitted 19F51003, expected 1AF04003 (detail 18620)",
+      "4": "pm4.fetch_register_equals_shadow: tracked/emitted 10000AB2, expected 10000472 (detail 18621)",
+      "5": "pm4.fetch_register_equals_shadow: tracked/emitted 19F53003, expected 1AF06003 (detail 18622)",
+      "6": "pm4.resolve_destination_equals_texture: tracked/emitted 199DF000, expected 16E45000 (detail 4294967295)",
+      "7": "pm4.resolve_destination_equals_texture: tracked/emitted 19A5F000, expected 16E45000 (detail 4294967295)",
+      "8": "pm4.resolve_destination_equals_texture: tracked/emitted 19A7F000, expected 16E45000 (detail 4294967295)"
+    }
+  }
+}
+}

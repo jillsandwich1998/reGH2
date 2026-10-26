@@ -1,0 +1,37 @@
+== f26_title_1
+f26_title_1              gpu avg/max= 18/ 43% vram= 597MB | fps= 60.3 frames=  362 >20ms=   0 >25ms=  0 >33ms=  0 max=  19.2ms | skipped_draws=   0 pipelines=   0 underruns=0 | exit=-9 shm=0
+saves: UNCHANGED (B13EBABEBABEBABE)
+trace: f26_title_1.trace  3.1 MB  counts=True
+== f26_title_2
+f26_title_2              gpu avg/max= 19/ 45% vram= 581MB | fps= 60.3 frames=  362 >20ms=   0 >25ms=  0 >33ms=  0 max=  19.3ms | skipped_draws=   0 pipelines=   0 underruns=0 | exit=-9 shm=0
+saves: UNCHANGED (B13EBABEBABEBABE)
+trace: f26_title_2.trace  3.0 MB  counts=True
+== f26_title_3
+f26_title_3              gpu avg/max= 21/ 40% vram= 592MB | fps= 60.2 frames=  361 >20ms=   0 >25ms=  0 >33ms=  0 max=  19.5ms | skipped_draws=   0 pipelines=   0 underruns=0 | exit=-9 shm=0
+saves: UNCHANGED (B13EBABEBABEBABE)
+trace: f26_title_3.trace  3.1 MB  counts=True
+== f26_autostart_1
+f26_autostart_1          gpu avg/max= 61/ 87% vram= 980MB | fps= 60.3 frames= 2050 >20ms=   9 >25ms=  0 >33ms=  0 max=  23.4ms | skipped_draws=   0 pipelines=   0 underruns=0 | exit=-9 shm=0
+saves: UNCHANGED (B13EBABEBABEBABE)
+trace: f26_autostart_1.trace  5.3 MB  counts=True
+== f26_autostart_2
+f26_autostart_2          gpu avg/max= 63/ 84% vram= 964MB | fps= 60.3 frames= 2049 >20ms=   9 >25ms=  1 >33ms=  0 max=  26.6ms | skipped_draws=   0 pipelines=   0 underruns=0 | exit=-9 shm=0
+saves: UNCHANGED (B13EBABEBABEBABE)
+trace: f26_autostart_2.trace  5.3 MB  counts=True
+== f26_autostart_3
+f26_autostart_3          gpu avg/max= 58/ 86% vram= 959MB | fps= 60.2 frames= 2047 >20ms=  10 >25ms=  0 >33ms=  0 max=  24.3ms | skipped_draws=   0 pipelines=   0 underruns=0 | exit=-9 shm=0
+saves: UNCHANGED (B13EBABEBABEBABE)
+trace: f26_autostart_3.trace  5.2 MB  counts=True
+== f26_normal_1
+f26_normal_1             gpu avg/max=  6/ 21% vram= 572MB | fps= 60.2 frames=  723 >20ms=  10 >25ms=  0 >33ms=  0 max=  20.6ms | skipped_draws=   0 pipelines=   0 underruns=0 | exit=-9 shm=0
+saves: UNCHANGED (B13EBABEBABEBABE)
+trace: f26_normal_1.trace  2.9 MB  counts=True
+== f26_normal_2
+f26_normal_2             gpu avg/max=  6/ 13% vram= 581MB | fps= 60.1 frames=  721 >20ms=  12 >25ms=  0 >33ms=  0 max=  20.7ms | skipped_draws=   0 pipelines=   0 underruns=0 | exit=-9 shm=0
+saves: UNCHANGED (B13EBABEBABEBABE)
+trace: f26_normal_2.trace  2.9 MB  counts=True
+== f26_normal_3
+f26_normal_3             gpu avg/max=  7/ 15% vram= 582MB | fps= 60.2 frames=  722 >20ms=  10 >25ms=  0 >33ms=  0 max=  20.7ms | skipped_draws=   0 pipelines=   0 underruns=0 | exit=-9 shm=0
+saves: UNCHANGED (B13EBABEBABEBABE)
+trace: f26_normal_3.trace  2.9 MB  counts=True
+done

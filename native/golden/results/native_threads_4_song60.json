@@ -1,0 +1,6 @@
+{"threads": 4, "seconds": 50, "iterations": 265951, "guest_memcpy_calls": 265951, "bytes_copied": 2178670592, "copy_errors": 0, "critical_section_enters": 265951, "tls_errors": 0, "irql_errors": 0, "spin_lock_sections": 265951, "live_comparison": {
+ "live_thread_id": 6, "live_tls_static_bytes": 0, "live_stack_bytes": 262144,
+ "pcr": {"words": 182, "identical": 174, "same_relative_pointer": 5, "live_only": 2, "different": 1, "first_differences": ["+38: live 408B584D, ours 0", "+3C: live A6550000, ours 0", "+74: live 70150000, ours 70330000"]},
+ "kthread": {"words": 684, "identical": 657, "same_relative_pointer": 19, "live_only": 5, "different": 3, "first_differences": ["+8: live 52455800, ours 0", "+C: live F8000028, ours 0", "+60: live 70150000, ours 70330000", "+64: live 7018FF10, ours 7036FF10", "+BC: live 00000000, ours 01000000", "+110: live 30030128, ours 0", "+114: live 30024128, ours 0", "+160: live 000003E5, ours 0"]},
+ "x": 0
+}}

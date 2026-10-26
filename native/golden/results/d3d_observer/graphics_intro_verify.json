@@ -1,0 +1,325 @@
+{
+ "seconds": 35.0,
+ "commits": 1399,
+ "bad_containers": 0,
+ "stage_mismatch": 0,
+ "unregistered_objects": 0,
+ "unregistered_draws": 0,
+ "distinct_vs_ps_pairs": 3,
+ "vertex": {"created": 1283, "distinct_containers": 377, "distinct_containers_in_cache": 377, "bound_draws": 1399, "registered_draws": 1399, "cache_hit_draws": 1399, "im_loads": 1398, "im_load_address_ok": 1398, "ucode_layout_ok": 1398, "ucode_checked": 1398, "ucode_identical": 0, "diff_words_buckets": {"3-6": 1398}},
+ "pixel": {"created": 1284, "distinct_containers": 259, "distinct_containers_in_cache": 259, "bound_draws": 1399, "registered_draws": 1399, "cache_hit_draws": 1399, "im_loads": 1399, "im_load_address_ok": 1399, "ucode_layout_ok": 1399, "ucode_checked": 1399, "ucode_identical": 1399, "diff_words_buckets": {"0": 1399}}
+ ,"graphics": {
+  "seconds": 35.01,
+  "verify": true,
+  "frames": 1777,
+  "calls": {
+    "SetVertexDeclaration": 1393,
+    "SetFVF": 13,
+    "CreateVertexDeclaration": 6,
+    "CreateVertexBuffer": 125,
+    "CreateIndexBuffer": 63,
+    "SetStreamSource": 1401,
+    "SetIndices": 1399,
+    "CreateTexture": 25,
+    "CreateTextureHeader": 25,
+    "CreateSurface": 7,
+    "SetTexture": 8508,
+    "SetSamplerState": 8890,
+    "SetRenderTarget": 26,
+    "SetDepthStencilSurface": 26,
+    "Resolve": 1420,
+    "Clear": 1395,
+    "Swap": 1777,
+    "DrawVertices": 1387,
+    "DrawIndexedVertices": 6,
+    "DrawIndexedVerticesUP": 0,
+    "BeginVertices": 6,
+    "EndVertices": 0,
+    "LockVertexBuffer": 125,
+    "LockIndexBuffer": 63,
+    "TextureLevelAddress": 4188
+  },
+  "sampler_state_calls_by_function": {
+    "823BF2F0": 4237,
+    "823BF3E0": 26,
+    "823BF478": 4237,
+    "823BF568": 26,
+    "823BF600": 26,
+    "823BF658": 26,
+    "823BF6F0": 26,
+    "823BF768": 26,
+    "823BF810": 26,
+    "823BF8B0": 26,
+    "823BF930": 26,
+    "823BF9B0": 26,
+    "823BFA20": 26,
+    "823BFA70": 26,
+    "823BFAC0": 26,
+    "823BFB10": 26,
+    "823BFB68": 26,
+    "823BFBC0": 26
+  },
+  "draws": {
+    "total": 1399,
+    "complete": 1399,
+    "complete_percent": 100.00,
+    "by_function": {
+      "DrawVertices": 1387,
+      "DrawIndexedVertices": 6,
+      "DrawIndexedVerticesUP": 0,
+      "BeginVertices": 6
+    },
+    "missing": {
+      "pipeline": 0,
+      "vertex_declaration": 0,
+      "index_buffer": 0,
+      "vertex_stream": 0,
+      "texture": 0,
+      "render_target": 0
+    },
+    "without_color_target_depth_only": 0,
+    "missing_texture_where_gpu_constant_is_also_invalid": 0,
+    "sampler_pointer_null_but_gpu_constant_still_the_previous_texture": 0,
+    "missing_texture_examples": {
+    },
+    "vertex_fetch_slots_read": 1399,
+    "vertex_fetch_slots_not_a_stream": 0,
+    "texture_fetch_slots_read": 4179,
+    "texture_fetch_slots_beyond_samplers": 0,
+    "per_frame_max": 2,
+    "frames_without_draws": 385,
+    "inline_vertex_draws": 6,
+    "inline_vertex_bytes": 576,
+    "draw_threads": "0"
+  },
+  "resources": {
+    "vertex_buffers": {
+      "registered": 123,
+      "created_through_hooks": 125,
+      "adopted_when_first_bound": 0,
+      "used_by_draws": 3,
+      "wrong_type_when_bound": 0,
+      "invalid_header": 0,
+      "address_reused": 2,
+      "lock_events": 123,
+      "bytes": 102872
+    },
+    "index_buffers": {
+      "registered": 62,
+      "created_through_hooks": 63,
+      "adopted_when_first_bound": 0,
+      "used_by_draws": 2,
+      "wrong_type_when_bound": 0,
+      "invalid_header": 0,
+      "address_reused": 1,
+      "lock_events": 62,
+      "bytes": 5940
+    },
+    "textures": {
+      "registered": 25,
+      "created_through_hooks": 25,
+      "adopted_when_first_bound": 1,
+      "used_by_draws": 15,
+      "wrong_type_when_bound": 0,
+      "invalid_header": 0,
+      "address_reused": 1,
+      "lock_events": 4183,
+      "level0_bytes_estimate": 26776320,
+      "header_changes": 0,
+      "tiled": 15,
+      "formats": {
+        "24_8_FLOAT": 1,
+        "8": 10,
+        "8_8_8_8": 7,
+        "DXT1": 2,
+        "DXT4_5": 4,
+        "other": 1
+      },
+      "most_common_sizes": {
+        "360x240": 6,
+        "1280x720": 6,
+        "720x480": 3,
+        "640x360": 1,
+        "640x320": 1,
+        "512x512": 1,
+        "512x256": 1,
+        "32x32": 1,
+        "320x180": 1,
+        "256x256": 1,
+        "256x128": 1,
+        "1024x512": 1
+      }
+    },
+    "surfaces": {
+      "registered": 7,
+      "created_through_hooks": 7,
+      "adopted_when_first_bound": 0,
+      "used_by_draws": 0,
+      "wrong_type_when_bound": 0,
+      "invalid_header": 0,
+      "address_reused": 0,
+      "lock_events": 0
+    },
+    "declarations": {
+      "registered": 7,
+      "created_through_hooks": 6,
+      "adopted_when_first_bound": 1,
+      "used_by_draws": 0,
+      "wrong_type_when_bound": 0,
+      "invalid_header": 0,
+      "address_reused": 0,
+      "lock_events": 0,
+      "elements": 29
+    }
+  },
+  "bindings": {
+    "vertex_stream_binds": 1401,
+    "vertex_stream_null_binds": 1,
+    "index_buffer_binds": 1399,
+    "index_buffer_null_binds": 6,
+    "texture_binds": 8508,
+    "texture_null_binds": 4304,
+    "texture_header_changes_seen_at_draw": 0,
+    "render_target_binds": 26,
+    "depth_stencil_binds": 26,
+    "distinct_render_targets": 2,
+    "distinct_depth_stencil_surfaces": 1
+  },
+  "resolves": {
+    "total": 1420,
+    "to_registered_texture": 1420,
+    "with_render_target_bound": 1420,
+    "distinct_destination_textures": 4,
+    "per_frame_max": 5,
+    "by_flags": {
+      "0x0": 1394,
+      "0x14": 12,
+      "0x300": 14
+    }
+  },
+  "clears": {
+    "total": 1395,
+    "by_flags": {
+      "0x1": 1387,
+      "0x3F": 8
+    }
+  },
+  "swaps": {
+    "total": 1777,
+    "front_buffer_registered": 1777,
+    "distinct_front_buffers": 3
+  },
+  "cpu_access": {
+    "vertex_buffer_locks": 125,
+    "distinct_vertex_buffers_locked": 123,
+    "index_buffer_locks": 63,
+    "distinct_index_buffers_locked": 62,
+    "texture_level_address_queries": 4188,
+    "distinct_textures_queried": 16
+  },
+  "threads": {
+    "guest_thread_0": 31891,
+    "guest_thread_1": 383
+  },
+  "verify": {
+    "draws_checked": 1399,
+    "checks": 365309,
+    "mismatches": 0,
+    "pm4_draws_parsed": 1393,
+    "pm4_draws_skipped_inline_or_empty": 6,
+    "pm4_draw_packets": 1393,
+    "pm4_fetch_registers_compared": 267456,
+    "resolves_checked": 1420,
+    "pm4_draws_skipped_segment_switch": 0,
+    "resolve_destination_exactly_the_texture_base": 1418,
+    "by_check": {
+      "device.vertex_declaration": {
+        "checks": 1399,
+        "mismatches": 0
+      },
+      "device.index_buffer": {
+        "checks": 1399,
+        "mismatches": 0
+      },
+      "device.render_target": {
+        "checks": 5596,
+        "mismatches": 0
+      },
+      "device.depth_stencil": {
+        "checks": 1399,
+        "mismatches": 0
+      },
+      "device.stream_vertex_buffer": {
+        "checks": 22384,
+        "mismatches": 0
+      },
+      "device.stream_stride": {
+        "checks": 2798,
+        "mismatches": 0
+      },
+      "device.texture": {
+        "checks": 36374,
+        "mismatches": 0
+      },
+      "shadow.texture_fetch0": {
+        "checks": 4179,
+        "mismatches": 0
+      },
+      "shadow.texture_fetch1_base_format": {
+        "checks": 4179,
+        "mismatches": 0
+      },
+      "shadow.texture_fetch2_size": {
+        "checks": 4179,
+        "mismatches": 0
+      },
+      "shadow.texture_fetch5_mip_address": {
+        "checks": 4179,
+        "mismatches": 0
+      },
+      "shadow.vertex_fetch_address": {
+        "checks": 1393,
+        "mismatches": 0
+      },
+      "shadow.vertex_fetch_size": {
+        "checks": 1393,
+        "mismatches": 0
+      },
+      "pm4.draw_primitive": {
+        "checks": 1393,
+        "mismatches": 0
+      },
+      "pm4.draw_count": {
+        "checks": 1393,
+        "mismatches": 0
+      },
+      "pm4.draw_source": {
+        "checks": 1393,
+        "mismatches": 0
+      },
+      "pm4.draw_dma_base": {
+        "checks": 6,
+        "mismatches": 0
+      },
+      "pm4.draw_dma_size": {
+        "checks": 6,
+        "mismatches": 0
+      },
+      "pm4.draw_packet_present": {
+        "checks": 1393,
+        "mismatches": 0
+      },
+      "pm4.fetch_register_equals_shadow": {
+        "checks": 267456,
+        "mismatches": 0
+      },
+      "pm4.resolve_destination_equals_texture": {
+        "checks": 1418,
+        "mismatches": 0
+      }
+    },
+    "first_mismatches": {
+    }
+  }
+}
+}

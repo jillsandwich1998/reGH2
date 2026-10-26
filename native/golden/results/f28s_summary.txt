@@ -1,0 +1,37 @@
+== f28s_title_1
+f28s_title_1             gpu avg/max= 17/ 38% vram= 827MB | fps= 60.5 frames=  363 >20ms=   0 >25ms=  0 >33ms=  0 max=  19.6ms | skipped_draws=   0 pipelines=   0 underruns=0 | exit=-9 shm=0
+saves: UNCHANGED (B13EBABEBABEBABE)
+trace: f28s_title_1.trace  3.1 MB  counts=True
+== f28s_title_2
+f28s_title_2             gpu avg/max= 20/ 44% vram= 829MB | fps= 60.0 frames=  360 >20ms=   0 >25ms=  0 >33ms=  0 max=  19.0ms | skipped_draws=   0 pipelines=   0 underruns=0 | exit=-9 shm=0
+saves: UNCHANGED (B13EBABEBABEBABE)
+trace: f28s_title_2.trace  3.1 MB  counts=True
+== f28s_title_3
+f28s_title_3             gpu avg/max= 18/ 39% vram= 832MB | fps= 60.3 frames=  362 >20ms=   0 >25ms=  0 >33ms=  0 max=  19.4ms | skipped_draws=   0 pipelines=   0 underruns=0 | exit=-9 shm=0
+saves: UNCHANGED (B13EBABEBABEBABE)
+trace: f28s_title_3.trace  3.0 MB  counts=True
+== f28s_autostart_1
+f28s_autostart_1         gpu avg/max= 59/ 88% vram=1234MB | fps= 60.2 frames= 2048 >20ms=  10 >25ms=  1 >33ms=  0 max=  26.2ms | skipped_draws=   0 pipelines=   0 underruns=0 | exit=-9 shm=0
+saves: UNCHANGED (B13EBABEBABEBABE)
+trace: f28s_autostart_1.trace  5.2 MB  counts=True
+== f28s_autostart_2
+f28s_autostart_2         gpu avg/max= 60/ 84% vram=1231MB | fps= 60.3 frames= 2051 >20ms=  13 >25ms=  0 >33ms=  0 max=  23.8ms | skipped_draws=   0 pipelines=   0 underruns=0 | exit=-9 shm=0
+saves: UNCHANGED (B13EBABEBABEBABE)
+trace: f28s_autostart_2.trace  5.2 MB  counts=True
+== f28s_autostart_3
+f28s_autostart_3         gpu avg/max= 61/ 92% vram=1255MB | fps= 60.2 frames= 2046 >20ms=  30 >25ms=  3 >33ms=  1 max=  53.2ms | skipped_draws=   0 pipelines=   0 underruns=0 | exit=-9 shm=0
+saves: UNCHANGED (B13EBABEBABEBABE)
+trace: f28s_autostart_3.trace  5.2 MB  counts=True
+== f28s_normal_1
+f28s_normal_1            gpu avg/max=  6/ 13% vram= 834MB | fps= 60.2 frames=  722 >20ms=  13 >25ms=  0 >33ms=  0 max=  20.6ms | skipped_draws=   0 pipelines=   0 underruns=0 | exit=-9 shm=0
+saves: UNCHANGED (B13EBABEBABEBABE)
+trace: f28s_normal_1.trace  2.9 MB  counts=True
+== f28s_normal_2
+f28s_normal_2            gpu avg/max=  7/ 28% vram= 872MB | fps= 60.2 frames=  722 >20ms=  15 >25ms=  0 >33ms=  0 max=  20.3ms | skipped_draws=   0 pipelines=   0 underruns=0 | exit=-9 shm=0
+saves: UNCHANGED (B13EBABEBABEBABE)
+trace: f28s_normal_2.trace  2.9 MB  counts=True
+== f28s_normal_3
+f28s_normal_3            gpu avg/max=  8/ 21% vram= 812MB | fps= 60.0 frames=  720 >20ms=  17 >25ms=  0 >33ms=  0 max=  20.3ms | skipped_draws=   0 pipelines=   0 underruns=0 | exit=-9 shm=0
+saves: UNCHANGED (B13EBABEBABEBABE)
+trace: f28s_normal_3.trace  2.9 MB  counts=True
+done

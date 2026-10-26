@@ -1,0 +1,1 @@
+{"seconds": 50, "sets": 29612, "resets": 5512, "semaphore_releases": 9184, "waits": 37097, "waits_that_slept": 36240, "wait_timeouts": 135, "multi_object_waits": 9182, "handles_created": 18, "waits_forwarded_to_the_runtime": 4, "mixed_native_and_runtime_waits": 0, "runtime_reads_bridged": 0}

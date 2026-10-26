@@ -1,0 +1,19 @@
+== title: golden 3 runs, candidate 1 runs -> PASS
+   [ok] SET     89 imports in golden (all runs agree: True)
+   [ok] COUNTS  89 imports checked, 0 outside the band
+   [ok] ORDER   first-seen order ratio candidate>=0.978 vs golden-golden>=0.978
+   [ok] MAIN    main-thread prefix (1500 events) ratio candidate>=0.999 vs golden-golden>=0.999
+   [ok] RETURNS 35 of 89 imports have clean status returns in golden and were judged
+== autostart: golden 3 runs, candidate 1 runs -> PASS
+   [ok] SET     98 imports in golden (all runs agree: True)
+   [ok] COUNTS  98 imports checked, 0 outside the band
+   [ok] ORDER   first-seen order ratio candidate>=0.980 vs golden-golden>=0.980
+   [ok] MAIN    main-thread prefix (1500 events) ratio candidate>=0.999 vs golden-golden>=0.999
+   [ok] RETURNS 37 of 98 imports have clean status returns in golden and were judged
+== normal: golden 3 runs, candidate 1 runs -> PASS
+   [ok] SET     83 imports in golden (all runs agree: True)
+   [ok] COUNTS  83 imports checked, 0 outside the band
+   [ok] ORDER   first-seen order ratio candidate>=0.976 vs golden-golden>=0.976
+   [ok] MAIN    main-thread prefix (1500 events) ratio candidate>=0.999 vs golden-golden>=0.999
+   [ok] RETURNS 36 of 83 imports have clean status returns in golden and were judged
+OVERALL: PASS

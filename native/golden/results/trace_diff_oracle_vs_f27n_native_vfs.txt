@@ -1,0 +1,22 @@
+== title: golden 3 runs, candidate 3 runs -> FAIL
+   [ok] SET     89 imports in golden (all runs agree: True)
+   [!!] COUNTS  89 imports checked, 3 outside the band: RtlNtStatusToDosError run1=2 golden[157..162]; RtlNtStatusToDosError run2=2 golden[157..162]; RtlNtStatusToDosError run3=2 golden[157..162]
+   [ok] ORDER   first-seen order ratio candidate>=0.966 vs golden-golden>=1.000
+   [ok] MAIN    main-thread prefix (1500 events) ratio candidate>=0.993 vs golden-golden>=0.999
+   [ok] RETURNS 36 of 89 imports have clean status returns in golden and were judged
+   (info) pseudo events in candidate: <mmio_load>=[2272, 2209, 2251], <mmio_store>=[11854, 11720, 11800]
+== autostart: golden 3 runs, candidate 3 runs -> FAIL
+   [ok] SET     98 imports in golden (all runs agree: True)
+   [!!] COUNTS  98 imports checked, 3 outside the band: RtlNtStatusToDosError run1=42 golden[870..874]; RtlNtStatusToDosError run2=42 golden[870..874]; RtlNtStatusToDosError run3=42 golden[870..874]
+   [ok] ORDER   first-seen order ratio candidate>=0.969 vs golden-golden>=0.980
+   [ok] MAIN    main-thread prefix (1500 events) ratio candidate>=0.993 vs golden-golden>=0.999
+   [ok] RETURNS 38 of 98 imports have clean status returns in golden and were judged
+   (info) pseudo events in candidate: <mmio_load>=[4602, 4620, 4576], <mmio_store>=[35849, 35323, 35721]
+== normal: golden 3 runs, candidate 3 runs -> FAIL
+   [!!] SET     83 imports in golden (all runs agree: True); run 1: extra=[] missing=['RtlNtStatusToDosError']; run 2: extra=[] missing=['RtlNtStatusToDosError']; run 3: extra=[] missing=['RtlNtStatusToDosError']
+   [!!] COUNTS  83 imports checked, 3 outside the band: RtlNtStatusToDosError run1=0 golden[244..244]; RtlNtStatusToDosError run2=0 golden[244..244]; RtlNtStatusToDosError run3=0 golden[244..244]
+   [ok] ORDER   first-seen order ratio candidate>=0.970 vs golden-golden>=1.000
+   [ok] MAIN    main-thread prefix (1500 events) ratio candidate>=0.993 vs golden-golden>=0.999
+   [ok] RETURNS 36 of 83 imports have clean status returns in golden and were judged
+   (info) pseudo events in candidate: <mmio_load>=[1468, 1468, 1467], <mmio_store>=[2630, 2632, 2632]
+OVERALL: FAIL

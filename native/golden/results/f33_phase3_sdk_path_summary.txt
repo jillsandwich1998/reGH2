@@ -1,0 +1,37 @@
+== f33_title_1
+f33_title_1              gpu avg/max= 25/ 48% vram=1203MB | fps= 60.3 frames=  362 >20ms=   1 >25ms=  0 >33ms=  0 max=  20.7ms | skipped_draws=   0 pipelines=   0 underruns=0 | exit=-9 shm=0
+saves: UNCHANGED (B13EBABEBABEBABE)
+trace: f33_title_1.trace  3.0 MB  counts=True
+== f33_title_2
+f33_title_2              gpu avg/max= 16/ 34% vram=1195MB | fps= 60.3 frames=  362 >20ms=   1 >25ms=  0 >33ms=  0 max=  22.0ms | skipped_draws=   0 pipelines=   0 underruns=0 | exit=-9 shm=0
+saves: UNCHANGED (B13EBABEBABEBABE)
+trace: f33_title_2.trace  3.0 MB  counts=True
+== f33_title_3
+f33_title_3              gpu avg/max= 21/ 39% vram=1208MB | fps= 60.3 frames=  362 >20ms=   0 >25ms=  0 >33ms=  0 max=  19.3ms | skipped_draws=   0 pipelines=   0 underruns=0 | exit=-9 shm=0
+saves: UNCHANGED (B13EBABEBABEBABE)
+trace: f33_title_3.trace  3.0 MB  counts=True
+== f33_autostart_1
+f33_autostart_1          gpu avg/max= 57/ 92% vram=1601MB | fps= 60.1 frames= 2643 >20ms=  31 >25ms=  7 >33ms=  4 max= 127.1ms | skipped_draws=   0 pipelines=   0 underruns=0 | exit=-9 shm=0
+saves: UNCHANGED (B13EBABEBABEBABE)
+trace: f33_autostart_1.trace  5.4 MB  counts=True
+== f33_autostart_2
+f33_autostart_2          gpu avg/max= 56/ 89% vram=1581MB | fps= 60.3 frames= 2652 >20ms=  13 >25ms=  0 >33ms=  0 max=  24.5ms | skipped_draws=   0 pipelines=   0 underruns=0 | exit=-9 shm=0
+saves: UNCHANGED (B13EBABEBABEBABE)
+trace: f33_autostart_2.trace  5.5 MB  counts=True
+== f33_autostart_3
+f33_autostart_3          gpu avg/max= 54/ 84% vram=1579MB | fps= 60.0 frames= 2642 >20ms=  16 >25ms=  3 >33ms=  3 max= 120.5ms | skipped_draws=   0 pipelines=   0 underruns=0 | exit=-9 shm=0
+saves: UNCHANGED (B13EBABEBABEBABE)
+trace: f33_autostart_3.trace  5.4 MB  counts=True
+== f33_normal_1
+f33_normal_1             gpu avg/max=  7/ 16% vram=1173MB | fps= 60.2 frames=  723 >20ms=   8 >25ms=  0 >33ms=  0 max=  20.3ms | skipped_draws=   0 pipelines=   0 underruns=0 | exit=-9 shm=0
+saves: UNCHANGED (B13EBABEBABEBABE)
+trace: f33_normal_1.trace  2.9 MB  counts=True
+== f33_normal_2
+f33_normal_2             gpu avg/max=  7/ 15% vram=1165MB | fps= 60.1 frames=  721 >20ms=  15 >25ms=  0 >33ms=  0 max=  20.4ms | skipped_draws=   0 pipelines=   0 underruns=0 | exit=-9 shm=0
+saves: UNCHANGED (B13EBABEBABEBABE)
+trace: f33_normal_2.trace  2.9 MB  counts=True
+== f33_normal_3
+f33_normal_3             gpu avg/max=  5/ 15% vram=1175MB | fps= 60.2 frames=  722 >20ms=  18 >25ms=  0 >33ms=  0 max=  20.3ms | skipped_draws=   0 pipelines=   0 underruns=0 | exit=-9 shm=0
+saves: UNCHANGED (B13EBABEBABEBABE)
+trace: f33_normal_3.trace  2.9 MB  counts=True
+done

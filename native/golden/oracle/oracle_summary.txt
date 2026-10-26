@@ -1,0 +1,37 @@
+== oracle_title_1
+oracle_title_1           gpu avg/max= 16/ 43% vram= 772MB | fps= 60.3 frames=  362 >20ms=   0 >25ms=  0 >33ms=  0 max=  19.1ms | skipped_draws=   0 pipelines=   0 underruns=0 | exit=-9 shm=0
+saves: UNCHANGED (B13EBABEBABEBABE)
+trace: oracle_title_1.trace  2.8 MB  counts=True
+== oracle_title_2
+oracle_title_2           gpu avg/max= 21/ 39% vram= 772MB | fps= 60.3 frames=  362 >20ms=   0 >25ms=  0 >33ms=  0 max=  19.1ms | skipped_draws=   0 pipelines=   0 underruns=0 | exit=-9 shm=0
+saves: UNCHANGED (B13EBABEBABEBABE)
+trace: oracle_title_2.trace  2.8 MB  counts=True
+== oracle_title_3
+oracle_title_3           gpu avg/max= 18/ 41% vram= 781MB | fps= 60.3 frames=  362 >20ms=   0 >25ms=  0 >33ms=  0 max=  18.5ms | skipped_draws=   0 pipelines=   0 underruns=0 | exit=-9 shm=0
+saves: UNCHANGED (B13EBABEBABEBABE)
+trace: oracle_title_3.trace  2.8 MB  counts=True
+== oracle_autostart_1
+oracle_autostart_1       gpu avg/max= 61/ 89% vram=1150MB | fps= 60.3 frames= 2051 >20ms=  21 >25ms=  1 >33ms=  0 max=  26.6ms | skipped_draws=   0 pipelines=   0 underruns=0 | exit=-9 shm=0
+saves: UNCHANGED (B13EBABEBABEBABE)
+trace: oracle_autostart_1.trace  5.1 MB  counts=True
+== oracle_autostart_2
+oracle_autostart_2       gpu avg/max= 62/ 86% vram=1143MB | fps= 60.3 frames= 2049 >20ms=  14 >25ms=  1 >33ms=  0 max=  26.7ms | skipped_draws=   0 pipelines=   0 underruns=0 | exit=-9 shm=0
+saves: UNCHANGED (B13EBABEBABEBABE)
+trace: oracle_autostart_2.trace  5.1 MB  counts=True
+== oracle_autostart_3
+oracle_autostart_3       gpu avg/max= 63/ 85% vram=1128MB | fps= 60.3 frames= 2050 >20ms=  13 >25ms=  1 >33ms=  0 max=  25.9ms | skipped_draws=   0 pipelines=   0 underruns=0 | exit=-9 shm=0
+saves: UNCHANGED (B13EBABEBABEBABE)
+trace: oracle_autostart_3.trace  5.1 MB  counts=True
+== oracle_normal_1
+oracle_normal_1          gpu avg/max=  8/ 16% vram= 731MB | fps= 60.2 frames=  723 >20ms=  14 >25ms=  0 >33ms=  0 max=  20.3ms | skipped_draws=   0 pipelines=   0 underruns=0 | exit=-9 shm=0
+saves: UNCHANGED (B13EBABEBABEBABE)
+trace: oracle_normal_1.trace  2.7 MB  counts=True
+== oracle_normal_2
+oracle_normal_2          gpu avg/max=  7/ 16% vram= 741MB | fps= 60.2 frames=  722 >20ms=  11 >25ms=  0 >33ms=  0 max=  20.7ms | skipped_draws=   0 pipelines=   0 underruns=0 | exit=-9 shm=0
+saves: UNCHANGED (B13EBABEBABEBABE)
+trace: oracle_normal_2.trace  2.7 MB  counts=True
+== oracle_normal_3
+oracle_normal_3          gpu avg/max=  7/ 18% vram= 748MB | fps= 60.2 frames=  723 >20ms=  13 >25ms=  0 >33ms=  0 max=  20.6ms | skipped_draws=   0 pipelines=   0 underruns=0 | exit=-9 shm=0
+saves: UNCHANGED (B13EBABEBABEBABE)
+trace: oracle_normal_3.trace  2.7 MB  counts=True
+done
