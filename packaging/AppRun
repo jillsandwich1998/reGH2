@@ -15,6 +15,7 @@ for f in "$here"/usr/fallback/*; do
 done
 export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$fb"
 export GH2_SDK="$here/usr/sdk"
+export GH2_VULKAN_LOADER="$here/usr/fallback/libvulkan.so.1"   # linked against when the host has no Vulkan development files (see native/gfx/vk/CMakeLists.txt)
 export GH2_CXX="$here/usr/toolchain/bin/clang++"
 sed "s|@APPDIR@|$here|g" "$here/usr/app/toolchain.cmake.in" > "$cache/toolchain.cmake"
 export GH2_TOOLCHAIN_FILE="$cache/toolchain.cmake"

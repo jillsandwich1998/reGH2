@@ -177,8 +177,33 @@ class Installer:
             os.makedirs(fb, exist_ok=True)
             for f in glob.glob(os.path.join(appdir, "usr", "fallback", "*")):
                 replace_file(f, os.path.join(fb, os.path.basename(f)))
+        if appdir:   # what the game needs to make its shader cache at the first start (see app/src/shader_bootstrap.cpp)
+            tools = os.path.join(appdir, "usr", "app", "shader-tools")
+            if os.path.isdir(tools):
+                dest = os.path.join(app, "shader-tools")
+                if not os.path.exists(os.path.join(dest, ".version")) or open(os.path.join(dest, ".version")).read() != self.shader_tools_version(tools):
+                    tmp = dest + ".new"
+                    shutil.rmtree(tmp, ignore_errors=True)
+                    shutil.copytree(tools, tmp, symlinks=True)
+                    with open(os.path.join(tmp, ".version"), "w") as f:
+                        f.write(self.shader_tools_version(tools))
+                    shutil.rmtree(dest, ignore_errors=True)
+                    os.replace(tmp, dest)
         if not os.path.exists(os.path.join(lib, "librexruntime.so")):
             raise InstallError("librexruntime.so not found (SDK at %s)" % self.sdk)
+
+    @staticmethod
+    def shader_tools_version(tools):
+        """Changes whenever the scripts, the patches or the XenosRecomp binary of the bundle change."""
+        h = hashlib.sha1()
+        for root, _, names in sorted(os.walk(tools)):
+            for name in sorted(names):
+                p = os.path.join(root, name)
+                st = os.stat(p)
+                h.update(("%s %d" % (os.path.relpath(p, tools), st.st_size)).encode())
+                if name.endswith((".py", ".patch", ".h")):
+                    h.update(open(p, "rb").read())
+        return h.hexdigest()
 
     def make_shortcut(self):
         """Menu entry + desktop icon; only when running from an AppImage (the shortcut starts that file)."""
@@ -353,6 +378,9 @@ class Installer:
                     os.replace(tmp, link)
             libs.append(run_libs)
         e["LD_LIBRARY_PATH"] = ":".join(libs + ([e["LD_LIBRARY_PATH"]] if e.get("LD_LIBRARY_PATH") else []))
+        appdir = os.environ.get("APPDIR")   # started from the AppImage: its portable Python makes the shader cache at the first start (the host may have no python3)
+        if appdir and os.path.exists(os.path.join(appdir, "usr", "python", "bin", "python3")):
+            e["GH2_PYTHON"] = os.path.join(appdir, "usr", "python", "bin", "python3")
         e["REX_GAME_DATA_ROOT"] = (self.status() or {}).get("game_dir", "")
         e["REX_GPU_PLUGIN"] = "xenos"
         return e
@@ -430,10 +458,12 @@ class Installer:
         """Identifies what gets compiled (our sources, hints, CMake and the SDK patches): a different one means the
         installed game is out of date and a rebuild is worthwhile."""
         h = hashlib.sha1()
-        for root in (self.app_dir, os.path.join(repo_root(), "sdk-patches")):
+        for root in (self.app_dir, os.path.join(repo_root(), "sdk-patches"), os.path.join(repo_root(), "native")):
             for dirpath, dirnames, filenames in os.walk(root):
-                dirnames.sort()
+                dirnames[:] = sorted(d for d in dirnames if d != "__pycache__")
                 for name in sorted(filenames):
+                    if name.endswith(".pyc"):
+                        continue
                     path = os.path.join(dirpath, name)
                     h.update(os.path.relpath(path, root).encode())
                     with open(path, "rb") as f:
@@ -503,6 +533,9 @@ class Installer:
             if os.path.isdir(dst):
                 shutil.rmtree(dst)
             shutil.copytree(os.path.join(self.app_dir, item), dst)
+        # native/: hooks, boundary tracer and the shim that isolates the generated code (CMakeLists.txt adds it as a subdirectory)
+        shutil.copytree(os.path.join(repo_root(), "native"), os.path.join(build_dir, "native"),
+                        ignore=shutil.ignore_patterns("__pycache__", "golden"))
         shutil.copy(os.path.join(self.app_dir, "CMakeLists.txt"), os.path.join(build_dir, "CMakeLists.txt"))
         text = open(os.path.join(self.app_dir, "gh2_manifest.toml.in")).read()
         text = text.replace("@GAME_ROOT@", game_dir).replace("@XEX_PATH@", xex)

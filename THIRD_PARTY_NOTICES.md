@@ -10,6 +10,22 @@ This project contains no game data and no code generated from the game. It build
 * **AMD FidelityFX** FSR 1 / CAS shaders (MIT) - through the SDK.
 * **Dear ImGui** (MIT), **SDL3** (zlib), **FFmpeg** (LGPL) - through the SDK.
 * **XenonRecomp** (hedge-dev, MIT) - the codegen lineage the SDK builds on.
+* **Headers copied from the ReXGlue SDK** into `native/rt/abi/shim/rex/` (BSD-3-Clause, Copyright (c) 2026 Tom Clay, whose own file
+  headers say "Based on XenonRecomp/UnleashedRecomp", hedge-dev, MIT): `ppc/context.h`, `ppc/func.h` (one declaration changed),
+  `ppc/intrinsics.h`, `types.h`, `platform/fpscr.h`, `image_info.h`. See `native/rt/abi/VENDORED.md`. The other headers there
+  (`platform.h`, `assert.h`, the `rex/*` aliases and `gh2abi/abi.h`) are written for this project.
+* **simde** (MIT, the SIMDe authors) - SIMD emulation used by the PowerPC vector intrinsics; taken from the SDK's copy.
+* **XenosRecomp** (hedge-dev, MIT) - Xbox 360 shader microcode to HLSL / SPIR-V. It is NOT in this repository: `native/third_party/fetch.sh`
+  clones it at a pinned commit on the machine that builds the shader cache, and applies the two patches in `native/third_party/patches/`
+  (diffs against its files, kept under its MIT license). Its own submodules, used the same way: **smol-v** (MIT or public domain,
+  Aras Pranckevicius), **zstd** (BSD, Meta), **xxHash** (BSD-2, Yann Collet), **{fmt}** (MIT, Victor Zverovich and contributors) and the prebuilt
+  **DirectXShaderCompiler** binaries (Microsoft, under the license published by that project). `native/gfx/shader_cache` includes
+  xxHash's header the same way. **SPIRV-Tools** (`spirv-val`, Apache-2.0) is only run as a checker.
+  The AppImage does carry a **built copy of the patched XenosRecomp** together with `libdxcompiler.so` / `libdxil.so` (DirectXShaderCompiler, Microsoft, LLVM license with
+  exceptions: Apache-2.0 with LLVM exceptions / University of Illinois, see that project) and the C++ runtime it was built with, in `usr/app/shader-tools`
+  (`packaging/build-shader-tools.sh`): the game runs them on the player's machine, once, to translate the shaders of the player's own copy of the game. No shader of the game is distributed.
+* **Mackiloha / ArkHelper** (MIT): the public description of the Harmonix ARK format that `native/tools/ark_extract.py` was written from (the tool
+  is a reimplementation; no code was copied). The tool only runs on the player's own game files.
 
 The AppImage additionally bundles clang/LLVM 20 (Apache-2.0 with LLVM exceptions), CMake (BSD-3-Clause), Ninja (Apache-2.0),
 glibc / libstdc++ runtime headers and libraries (LGPL / GPL with runtime exception) and a portable CPython with Tk (PSF license).

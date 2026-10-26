@@ -13,6 +13,9 @@ cp -a "$out/sdk/linux-amd64" "$app/usr/sdk/"
 
 echo "== our sources"
 for d in scripts launcher app sdk-patches; do cp -a "$repo/$d" "$app/usr/app/"; done
+# native/ without the clone and the build tree of XenosRecomp (hundreds of MB, made again below as a small bundle)
+mkdir -p "$app/usr/app/native"
+tar -C "$repo/native" --exclude=./third_party/XenosRecomp --exclude=./third_party/build -cf - . | tar -C "$app/usr/app/native" -xf -
 find "$app/usr/app" -name __pycache__ -prune -exec rm -rf {} +
 
 echo "== clang 20 + lld"
@@ -21,9 +24,12 @@ cp -aL "$llvm/bin/clang-20" "$app/usr/toolchain/bin/clang"
 ln -sf clang "$app/usr/toolchain/bin/clang++"
 cp -aL "$llvm/bin/lld" "$app/usr/toolchain/bin/lld"
 ln -sf lld "$app/usr/toolchain/bin/ld.lld"
+# the archiver for the static libraries: a clean machine has no binutils (CMake would say CMAKE_AR-NOTFOUND)
+cp -aL "$llvm/bin/llvm-ar" "$app/usr/toolchain/bin/llvm-ar"
+ln -sf llvm-ar "$app/usr/toolchain/bin/llvm-ranlib"
 mkdir -p "$app/usr/toolchain/lib"
 cp -a "$llvm/lib/clang" "$app/usr/toolchain/lib/clang"
-ldd "$llvm/bin/clang-20" "$llvm/bin/lld" | awk '/=> \//{print $3}' | sort -u | grep -E "LLVM|clang|libedit|libffi|libxml|libz|libzstd|libtinfo|libicu|libbsd|libmd" \
+ldd "$llvm/bin/clang-20" "$llvm/bin/lld" "$llvm/bin/llvm-ar" | awk '/=> \//{print $3}' | sort -u | grep -E "LLVM|clang|libedit|libffi|libxml|libz|libzstd|libtinfo|libicu|libbsd|libmd" \
   | while read -r so; do cp -aL "$so" "$app/usr/toolchain/lib/"; done || true
 
 echo "== sysroot (glibc 2.35 + libstdc++ 13, extracted from the .deb files)"
@@ -44,6 +50,15 @@ done
 [ -e "$app/usr/sysroot/lib" ] || ln -s usr/lib "$app/usr/sysroot/lib"
 mkdir -p "$out/sysroot-cache" && cp -a "$app/usr/sysroot/." "$out/sysroot-cache/"
 cd /; rm -rf "$tmp"
+fi
+# zlib's header and library: the ARK reader of the game (native/kernel/vfs) inflates with it, and a player's machine may have no zlib development files
+if [ ! -e "$app/usr/sysroot/usr/include/zlib.h" ]; then
+  ztmp="$(mktemp -d)"; (cd "$ztmp" && apt-get update >/dev/null && apt-get download zlib1g zlib1g-dev >/dev/null && for deb in *.deb; do dpkg-deb -x "$deb" "$app/usr/sysroot"; done)
+  find "$app/usr/sysroot" -type l | while read -r l; do
+    t="$(readlink "$l")"
+    case "$t" in /*) ln -sfn "$(realpath -m --relative-to="$(dirname "$l")" "$app/usr/sysroot$t")" "$l" ;; esac
+  done
+  rm -rf "$ztmp"; mkdir -p "$out/sysroot-cache" && cp -a "$app/usr/sysroot/." "$out/sysroot-cache/"
 fi
 # the runtime libstdc++ / libgcc_s that the built game needs on older distros
 cp -aL "$app/usr/sysroot/usr/lib/x86_64-linux-gnu/libstdc++.so.6" "$app/usr/lib/" 2>/dev/null || \
@@ -77,6 +92,14 @@ print([u for u in a if re.search(r'cpython-3\.12\.[0-9]+(\+|%2B).*x86_64-unknown
 curl -sL -o python.tgz "$url"
 tar -xzf python.tgz -C "$app/usr"
 rm -f python.tgz
+
+echo "== shader tools (the first-start shader cache is made on the player's machine from the game's own files)"
+# patched XenosRecomp + DXC + the three pipeline scripts, built here against the same glibc / libstdc++ as everything else; the installer copies the folder next to the game
+src="$out/shader-src"   # a writable copy: the build clones XenosRecomp (git, pinned commit) and compiles it inside the tree
+rm -rf "$src"; mkdir -p "$src/packaging" "$src/native"
+cp "$repo/packaging/build-shader-tools.sh" "$src/packaging/"
+tar -C "$repo/native" --exclude=./third_party/build -cf - . | tar -C "$src/native" -xf -
+GH2_XENOS_BUILD="$out/xenos-build" bash "$src/packaging/build-shader-tools.sh" "$app/usr/app/shader-tools" --runtime-libs "$app/usr/lib"
 
 echo "== licenses"
 mkdir -p "$app/usr/share/doc/regh2"
