@@ -9,3 +9,7 @@ out/
 dist/
 __pycache__/
 
+
+# Phase 2/3: the clone and build tree made by native/third_party/fetch.sh and native/tools/build_xenosrecomp.sh (the patches in native/third_party/patches are ours and tracked)
+native/third_party/XenosRecomp/
+native/third_party/build/
