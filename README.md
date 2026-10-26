@@ -8,24 +8,50 @@ Guitar Hero II (Xbox 360) on the PC, rebuilt from your own copy of the game. Lin
 > bring your own copy of *Guitar Hero II* (Xbox 360, USA) and it is rebuilt on your computer. No game file, and no code
 > made from the game, is ever distributed.
 
-**Status: pre-release (0.2.0).** It has been played from start to finish of the Quick Play songs and in several venues on
-one computer (AMD Radeon RX 6600 XT, Mesa RADV, Linux), with a real X-plorer guitar. It is **not** yet known how it behaves on
-NVIDIA or Intel graphics, on SteamOS, or in every game mode. See *Testing and reporting problems* and *Known limits*.
+**Status: pre-release (0.2.0).** It has been played in Quick Play and in Career mode up to the fourth venue, with a real
+X-plorer guitar, on one computer (AMD Radeon RX 6600 XT, Mesa RADV, Linux). It has **not** been played from start to finish, so
+nothing here is promised to work in every song, venue or game mode. It is also **not** known how it behaves on NVIDIA or Intel
+graphics or on SteamOS. See *Testing and reporting problems* and *Known limits*.
 
-## How it works
+## A native Vulkan renderer, no emulation layer
+
+Earlier versions (0.1.x) ran the recompiled game on the runtime of the [ReXGlue SDK](https://github.com/rexglue/rexglue-sdk), which
+is derived from the Xenia emulator. Kernel services, memory, threads, graphics, sound and controllers all went through emulation
+layers, and the graphics could only be scaled by whole multiples of the console's 720p. **From 0.2.0 the game runs on this
+project's own native code instead**, and draws with its own **Vulkan renderer** at true 1080p, 1440p and 4K.
+
+| Layer | 0.1.x (ReXGlue runtime) | 0.2.0 (this project) |
+|---|---|---|
+| Game CPU code | recompiled | recompiled (same) |
+| Kernel services, memory, threads, files, synchronisation | emulated by the SDK runtime | `native/kernel`, `native/rt`; the game's threads, including the main one, are our own |
+| Graphics | the SDK's GPU emulation, integer resolution scales only | a native Vulkan renderer (`native/gfx`) that turns the console's GPU command stream into Vulkan calls; the game's shaders are translated from your copy with [XenosRecomp](https://github.com/hedge-dev/XenosRecomp); native 1080p, 1440p and 4K |
+| Audio, controllers | the SDK's | SDL3 (`native/platform`) |
+
+So the game no longer depends on the ReXGlue **runtime**. The SDK is still used for two things that do not take part in running the
+game's code or drawing its frames: its **code generator** (it turns the game's PowerPC code into C++ once, on your machine) and the
+**application shell** (window, in-game menu, saves, achievements, DLC).
+
+### What that gives
+
+Measured on the test machine (Ryzen 5600, RX 6600 XT), Quick Play, same moment of the same song, one run each:
+
+* **Native 1080p and 4K** (and 1440p, or any height you choose), with MSAA, anisotropic filtering and vsync selectable in the game
+  without restarting. In a 19-minute session at 4K (four songs) the average was 59.4 fps, the GPU used 9.7 ms per frame and nothing crashed.
+* **60.0 fps, the engine's own limit.** The game's logic is tied to 60 Hz, as on the console, so 60 fps is the most it can run
+  at; the options change how the frame is drawn, not the game's speed. The renderer keeps that rate with 16.7 ms between frames
+  and no dropped frames.
+* **Less load on the graphics card and memory** than the SDK's graphics path at 720p: the GPU was busy about 26% of the time
+  against 38%, and the game process used about 530 MB of RAM against 600 MB. (The native renderer uses *more* CPU than the SDK's
+  did, about one core against 0.65 of a core, because it does the work itself; the game's own recompiled code takes under a fifth
+  of a core.)
+* **No emulator start-up costs**: only the one-time shader translation (about 11 seconds) on the first start.
+
+These are one machine's numbers, not a benchmark: please report yours.
+
+## How it is built
 
 The game's PowerPC code is translated to C++ once, on your machine, from your own `default.xex` (static recompilation), and
-compiled with a compiler that comes inside the AppImage. What it runs on is mostly this project's own code:
-
-| Part | Where it comes from |
-|---|---|
-| The game's CPU code | recompiled on your machine with the code generator of the [ReXGlue SDK](https://github.com/rexglue/rexglue-sdk) |
-| Kernel services, memory, threads, file access, synchronisation | this project (`native/kernel`, `native/rt`) |
-| Graphics | this project: a Vulkan renderer (`native/gfx`) that turns the console's command stream into Vulkan; the game's shaders are translated from your copy by [XenosRecomp](https://github.com/hedge-dev/XenosRecomp) |
-| Audio and controllers | this project, on SDL3 (`native/platform`) |
-| Window, in-game menu, saves, achievements, DLC | the ReXGlue SDK (patched, see `sdk-patches/`) |
-
-There is no console emulator in the loop: no CPU, GPU or kernel emulation layer is running.
+compiled with a compiler that comes inside the AppImage.
 
 ## Using it (AppImage)
 
@@ -43,13 +69,13 @@ Command line: `reGH2-x86_64.AppImage install <iso|folder|default.xex>`, `... lau
 * **F2**: options. *GRAPHICS*: internal resolution (720p to 4K), anti-aliasing (MSAA), anisotropic filtering, vertical sync; display mode; controllers, keyboard, DLC, start-up, FPS counter, audio latency.
 * **Guitar or gamepad in the menus**: hold **START + BACK** for about 0.7 s to open or close the options; strum up/down moves, green selects, red goes back, yellow/orange change tab (gamepad: bumpers change tab, left stick moves).
 * **F9**: saves a screenshot of the game's own picture to `~/gh2_shots`.
-* The game logic runs at 60 frames per second, as on the console; the options change how it is drawn (resolution, vsync), not the speed.
+* The game is limited to 60 frames per second by its own engine, as on the console; the options change how it is drawn (resolution, vsync), not the speed.
 
 **Updates.** When the launcher opens it looks on GitHub for a newer release (one HTTPS request to the GitHub API, nothing else is sent; a tick box at the bottom of the launcher turns it off, or set `GH2_NO_UPDATE_CHECK=1`). If there is one, a bar offers **Update now**: it downloads the new AppImage, checks it against the release's `SHA256SUMS.txt`, replaces the old one and restarts the launcher. Then **Update game** rebuilds your installed game with the new version from the game files it was built from (a few minutes; saves are kept). Nothing is updated without your click. `reGH2-x86_64.AppImage update` shows whether a newer version exists and `update --apply` downloads it. The checksum comes from the same release, so it detects a damaged download, not a tampered release.
 
 ## Testing and reporting problems
 
-This is an early pre-release. **It is expected that you play it and test it on your own machine**, and that anything that does
+This is a pre-release. **It is expected that you play it and test it on your own machine**, and that anything that does
 not work is reported as a [GitHub issue](https://github.com/jillsandwich1998/reGH2/issues/new/choose). A good report lets us
 reproduce and analyse the problem:
 
@@ -74,7 +100,7 @@ For a problem you can *see* (a wrong picture), press **F9** while it is on scree
 * Not measured: the time from pressing a fret to the sound and to the picture (the audio buffers are small, see *Tools for finding performance problems*).
 * The graphics memory grows as new venues and songs are loaded (textures are kept, not freed): about 1.0 GB at 4K after four songs on the test machine.
 * A short pause when a song loads, between the song screens, is part of how the game itself loads.
-* Only Quick Play was tested systematically; Career, Practice, co-op and DLC songs need more play-testing.
+* Tested in Quick Play and in Career up to the fourth venue. The later venues, Practice, co-op and DLC songs have not been played and need play-testing.
 * Windows is not supported yet.
 
 ## Requirements
