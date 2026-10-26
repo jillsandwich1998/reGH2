@@ -11,6 +11,9 @@
 #include "png_writer.h"
 #include "problem_report.h"
 #include "keyboard.h"
+#include "menu_pad.h"
+#include "native_overlay.h"
+#include "native_window.h"
 
 #include <SDL3/SDL_dialog.h>
 #include <imgui.h>
@@ -65,6 +68,9 @@ REXCVAR_DEFINE_STRING(audio_latency, "low", "GH2",
 
 REXCVAR_DEFINE_BOOL(show_fps, false, "GH2",
                     "Show the frame rate of the game itself (measured in the game, not by the screen) with a graph");
+
+bool Gh2NativeGpuSelected();       // gh2_host_services.cpp: --gpu=native in effect (the menu is then drawn by the native renderer)
+uint32_t Gh2RenderHeight();        // the render_resolution cvar as a height (auto resolved)
 
 namespace {
 
@@ -160,11 +166,14 @@ void SaveMenuSettings(const std::filesystem::path& path) {
   out += "present_effect = \"" + Get("present_effect") + "\"\n";
   out += "startup_mode = \"" + Get("startup_mode") + "\"\n";
   out += "swap_post_effect = \"" + Get("swap_post_effect") + "\"\n";
+  out += "render_resolution = \"" + Get("render_resolution") + "\"\n";
+  out += "msaa = \"" + Get("msaa") + "\"\n";
+  out += "present_mode = \"" + Get("present_mode") + "\"\n";
   out += "keyboard_player = \"" + Get("keyboard_player") + "\"\n";
   out += "keyboard_strum = \"" + Get("keyboard_strum") + "\"\n";
   for (int i = 0; i < kGh2KeyActionCount; ++i)
     out += std::string(kGh2KeyActions[i].cvar) + " = \"" + Get(kGh2KeyActions[i].cvar) + "\"\n";
-  for (const char* name : {"present_dither", "fullscreen", "native_2x_msaa", "anisotropic_override", "resolution_scale",
+  for (const char* name : {"present_dither", "fullscreen", "native_2x_msaa", "anisotropic_override", "resolution_scale", "render_anisotropy",
                            "window_width", "window_height", "gfx_cas_sharpness", "gfx_fsr_softness", "controller_guitars_first", "show_fps"})
     out += std::string(name) + " = " + Get(name) + "\n";
   std::ofstream(path, std::ios::trunc) << out;
@@ -181,7 +190,7 @@ struct DlcEntry {
 namespace xam = rex::system::xam;
 
 }  // namespace
-bool Gh2ContentOpened(const std::string& file_name);  // src/gh2_host.cpp
+bool Gh2ContentOpened(const std::string& file_name);  // native/rt/hooks/hooks_misc.cpp
 namespace {
 
 std::vector<DlcEntry> ListDlc() {
@@ -296,18 +305,19 @@ void SDLCALL OnPathsPicked(void*, const char* const* files, int) {
 // ---- Look: the original game's menus ------------------------------------------------------------------------------
 
 struct Gh2Theme {
-  Gh2Theme() {
+  explicit Gh2Theme(float k = 1.0f) {   // k: the menu's size factor (it grows with the window)
     ImGuiStyle& s = ImGui::GetStyle();
     saved_ = s;
-    s.WindowRounding = 8.0f;
-    s.FrameRounding = 5.0f;
-    s.GrabRounding = 5.0f;
-    s.TabRounding = 5.0f;
-    s.WindowBorderSize = 2.0f;
-    s.FrameBorderSize = 1.0f;
-    s.WindowPadding = ImVec2(16, 14);
-    s.ItemSpacing = ImVec2(10, 9);
-    s.FramePadding = ImVec2(10, 6);
+    s.WindowRounding = 8.0f * k;
+    s.FrameRounding = 5.0f * k;
+    s.GrabRounding = 5.0f * k;
+    s.TabRounding = 5.0f * k;
+    s.WindowBorderSize = 2.0f * k;
+    s.FrameBorderSize = 1.0f * k;
+    s.ScrollbarSize = 14.0f * k;
+    s.WindowPadding = ImVec2(16 * k, 14 * k);
+    s.ItemSpacing = ImVec2(10 * k, 9 * k);
+    s.FramePadding = ImVec2(10 * k, 6 * k);
     ImVec4* c = s.Colors;
     const ImVec4 black(0.04f, 0.02f, 0.02f, 0.96f), red(0.80f, 0.11f, 0.10f, 1.0f),
         dark_red(0.40f, 0.05f, 0.05f, 1.0f), orange(0.98f, 0.50f, 0.10f, 1.0f), gold(1.0f, 0.83f, 0.25f, 1.0f),
@@ -364,7 +374,9 @@ GraphicsDialog* g_dialog = nullptr;  // self-owned, see GraphicsDialog::RequestC
 class GraphicsDialog : public rex::ui::ImGuiDialog {
  public:
   GraphicsDialog(rex::ui::ImGuiDrawer* drawer, std::filesystem::path config_path)
-      : ImGuiDialog(drawer), config_path_(std::move(config_path)) {}
+      : ImGuiDialog(drawer), config_path_(std::move(config_path)) {
+    Gh2MenuPadSetOpen(true);   // the game gets a neutral pad and the guitar / gamepad drive the menu
+  }
 
   // Dialogs own themselves: Close() marks them and ImGuiDialog::Draw deletes them once OnDraw has returned. Never
   // destroy one from inside its own OnDraw (the Close button) or from another thread while it is being drawn.
@@ -373,15 +385,21 @@ class GraphicsDialog : public rex::ui::ImGuiDialog {
  protected:
   void OnClose() override {
     Gh2KeyboardCaptureEnd();
+    Gh2MenuPadSetOpen(false);
     g_dialog = nullptr;
   }
 
   void OnDraw(ImGuiIO& io) override {
-    Gh2Theme theme;
+    Gh2MenuPadApply(io);   // the guitar / gamepad buttons, as Dear ImGui's gamepad navigation
+    const bool put_cursor = Gh2MenuPadTakeOpenedByPad() || (current_tab_ != last_tab_shown_);   // opened by the chord, or the tab changed: the cursor goes to the first widget
+    last_tab_shown_ = current_tab_;
+    cursor_request_ = cursor_request_ || put_cursor;
+    if (Gh2NativeGpuSelected()) text_scale_ = std::min(3.0f, std::max(1.0f, std::round(io.DisplaySize.y / 720.0f * 4.0f) / 4.0f));   // the native renderer's window can be any size
+    Gh2Theme theme(text_scale_);
     // Movable, not resizable: fixed width, height fits the content (scrolls if the screen is too small). Kept centred
     // until the user drags it: the display size reported on the first frames is not final, so a one-time placement
     // ends up off-centre.
-    constexpr float kMenuWidth = 720.0f;
+    const float kMenuWidth = 720.0f * text_scale_;
     ImGui::SetNextWindowSizeConstraints(ImVec2(kMenuWidth, 0.0f), ImVec2(kMenuWidth, io.DisplaySize.y * 0.94f));
     ImGui::SetNextWindowSize(ImVec2(kMenuWidth, 0.0f), ImGuiCond_Always);  // height auto-fits the current tab
     const ImVec2 center(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f);
@@ -401,11 +419,19 @@ class GraphicsDialog : public rex::ui::ImGuiDialog {
     if (std::getenv("GH2_MENU_DEBUG") && frames_ % 60 == 1)
       fprintf(stderr, "MENU after: fontsize=%.1f globalscale=%.2f winsize=%.0fx%.0f\n", ImGui::GetFontSize(), io.FontGlobalScale, ImGui::GetWindowSize().x, ImGui::GetWindowSize().y);
     if (ImGui::BeginTabBar("##tabs")) {
-      if (ImGui::BeginTabItem("GRAPHICS")) {
+      // the guitar's / gamepad's tab buttons: the target tab is selected for one frame
+      const int delta = Gh2MenuPadTabDelta();
+      if (delta != 0) want_tab_ = std::clamp(current_tab_ + (delta > 0 ? 1 : -1), 0, 3);
+      auto tab_flags = [&](int index, ImGuiTabItemFlags extra = 0) { return extra | (want_tab_ == index ? ImGuiTabItemFlags_SetSelected : 0); };
+      if (ImGui::BeginTabItem("GRAPHICS", nullptr, tab_flags(0))) {
+        current_tab_ = 0;
+        PlaceCursor();
         DrawGraphics();
         ImGui::EndTabItem();
       }
-      if (ImGui::BeginTabItem("GAME", nullptr, std::getenv("GH2_TEST_TAB_GAME") ? ImGuiTabItemFlags_SetSelected : 0)) {  // env: testing aid
+      if (ImGui::BeginTabItem("GAME", nullptr, tab_flags(1, std::getenv("GH2_TEST_TAB_GAME") ? ImGuiTabItemFlags_SetSelected : 0))) {  // env: testing aid
+        current_tab_ = 1;
+        PlaceCursor();
         DrawGame();
         ImGui::EndTabItem();
       }
@@ -413,7 +439,9 @@ class GraphicsDialog : public rex::ui::ImGuiDialog {
       const char* want_c = std::getenv("GH2_OPEN_TAB");
       const bool select_c = first_c && want_c && std::string(want_c) == "controllers";
       first_c = false;
-      if (ImGui::BeginTabItem("CONTROLLERS", nullptr, select_c ? ImGuiTabItemFlags_SetSelected : 0)) {
+      if (ImGui::BeginTabItem("CONTROLLERS", nullptr, tab_flags(2, select_c ? ImGuiTabItemFlags_SetSelected : 0))) {
+        current_tab_ = 2;
+        PlaceCursor();
         DrawControllers();
         ImGui::EndTabItem();
       }
@@ -421,10 +449,13 @@ class GraphicsDialog : public rex::ui::ImGuiDialog {
       const char* want = std::getenv("GH2_OPEN_TAB");
       const bool select = first && want && std::string(want) == "content";
       first = false;
-      if (ImGui::BeginTabItem("DOWNLOADABLE CONTENT", nullptr, select ? ImGuiTabItemFlags_SetSelected : 0)) {
+      if (ImGui::BeginTabItem("DOWNLOADABLE CONTENT", nullptr, tab_flags(3, select ? ImGuiTabItemFlags_SetSelected : 0))) {
+        current_tab_ = 3;
+        PlaceCursor();
         DrawContent();
         ImGui::EndTabItem();
       }
+      want_tab_ = -1;
       ImGui::EndTabBar();
     }
     ImGui::Separator();
@@ -433,7 +464,108 @@ class GraphicsDialog : public rex::ui::ImGuiDialog {
   }
 
  private:
+  // --gpu=native: what the renderer itself offers. Everything applies at once; "Save" keeps it for the next start.
+  void DrawGraphicsNative() {
+    ImGui::TextWrapped("Everything here applies at once. The defaults reproduce the console's own image (720p); a higher resolution costs GPU performance.");
+    ImGui::PushItemWidth(380.0f * text_scale_);
+
+    Heading("DISPLAY");
+    static const char* kModes[] = {"Borderless fullscreen (recommended)", "Windowed"};
+    int display_mode = GetBool("fullscreen") ? 0 : 1;
+    if (ImGui::Combo("Display mode", &display_mode, kModes, 2)) {
+      Set("fullscreen_exclusive", "false");  // never switch the monitor's video mode
+      Set("fullscreen", display_mode == 0 ? "true" : "false");
+    }
+    DimWrapped("Borderless fullscreen fills the screen at the desktop resolution, with no video mode switch and a quick alt-tab. The picture keeps its 16:9 shape.");
+    static const char* kVsync[] = {"On - no tearing (waits for the screen)", "Smooth - no tearing, lower latency", "Off - tearing, lowest latency"};
+    static const char* kVsyncValues[] = {"fifo", "mailbox", "immediate"};
+    int vsync = 1;
+    for (int i = 0; i < 3; ++i) vsync = Get("present_mode") == kVsyncValues[i] ? i : vsync;
+    if (ImGui::Combo("Vertical sync", &vsync, kVsync, 3)) Set("present_mode", kVsyncValues[vsync]);
+    DimWrapped("How pictures reach the screen. The game itself always runs at 60 frames per second; this only changes tearing and delay on faster screens.");
+    if (display_mode == 1) {
+      struct Size { const char* label; int w, h; };
+      static const Size kSizes[] = {{"Default (as tall as the render resolution)", 0, 0}, {"720p (1280x720)", 1280, 720}, {"900p (1600x900)", 1600, 900}, {"1080p (1920x1080)", 1920, 1080},
+                                    {"1440p (2560x1440)", 2560, 1440}, {"2160p (3840x2160)", 3840, 2160}, {"Custom...", -1, -1}};
+      const int cw = GetInt("window_width", 0), ch = GetInt("window_height", 0);
+      int size = 6;
+      for (int i = 0; i < 6; ++i)
+        if (kSizes[i].w == cw && kSizes[i].h == ch) size = i;
+      if (custom_size_) size = 6;
+      if (ImGui::Combo("Window size", &size, [](void*, int i) { return kSizes[i].label; }, nullptr, 7)) {
+        custom_size_ = size == 6;
+        if (size < 6) {
+          const int h = size == 0 ? static_cast<int>(Gh2RenderHeight()) : kSizes[size].h;
+          Set("window_width", std::to_string(size == 0 ? (h * 16 + 4) / 9 : kSizes[size].w));
+          Set("window_height", std::to_string(h));
+        } else if (cw == 0) {
+          Set("window_width", "1280");
+          Set("window_height", "720");
+        }
+      }
+      if (size == 6) {
+        int wh[2] = {cw, ch};
+        ImGui::SetNextItemWidth(260.0f * text_scale_);
+        if (ImGui::InputInt2("Width x height", wh, ImGuiInputTextFlags_EnterReturnsTrue)) {
+          Set("window_width", std::to_string(std::clamp(wh[0], 640, 7680)));
+          Set("window_height", std::to_string(std::clamp(wh[1], 360, 4320)));
+        }
+        DimWrapped("Press Enter to apply.");
+      }
+    }
+    const uint32_t win_w = Gh2NativeWindowPixelWidth(), win_h = Gh2NativeWindowPixelHeight();
+    if (win_w && win_h) DimWrapped("The window is %ux%u pixels now.", win_w, win_h);
+
+    Heading("RENDER RESOLUTION");
+    struct Preset { const char* label; uint32_t height; const char* value; };
+    static const Preset kPresets[] = {{"720p - the console's image (1x)", 720, "720p"},    {"900p (1.25x)", 900, "900p"},   {"1080p - Full HD (1.5x)", 1080, "1080p"},
+                                      {"1440p - Quad HD (2x)", 1440, "1440p"},              {"2160p - 4K (3x)", 2160, "2160p"}};
+    std::string current = Get("render_resolution");
+    for (char& c : current) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    const uint32_t height = Gh2RenderHeight();
+    int item = current == "auto" ? 5 : 6;   // 5 = auto, 6 = another height
+    for (int i = 0; i < 5 && current != "auto"; ++i)
+      if (kPresets[i].height == height) item = i;
+    char auto_label[96], other_label[64];
+    std::snprintf(auto_label, sizeof auto_label, "Auto - as the window (%up now)", height);
+    std::snprintf(other_label, sizeof other_label, "%up (%.2fx)", height, height / 720.0);
+    const char* labels[7] = {kPresets[0].label, kPresets[1].label, kPresets[2].label, kPresets[3].label, kPresets[4].label, auto_label, other_label};
+    if (ImGui::Combo("Render resolution", &item, labels, item == 6 ? 7 : 6)) {
+      if (item < 5) Set("render_resolution", kPresets[item].value);
+      else if (item == 5) Set("render_resolution", "auto");
+    }
+    DimWrapped("The game is drawn at %ux%u (%.2fx the console's 1280x720) and fitted to the window.", (height * 16 + 4) / 9, height, height / 720.0);
+    if (height >= 2160) ImGui::TextColored(kOrange, "Only for powerful graphics cards: this is nine times the pixels of the original image.");
+    else if (height >= 1440) ImGui::TextColored(kOrange, "Heavy: mid-range graphics cards may drop below 60 fps.");
+
+    Heading("ANTI-ALIASING");
+    static const char* kMsaa[] = {"Auto (off at 4K)", "On", "Off"};
+    static const char* kMsaaValues[] = {"auto", "on", "off"};
+    int msaa = 0;
+    for (int i = 0; i < 3; ++i) msaa = Get("msaa") == kMsaaValues[i] ? i : msaa;
+    if (ImGui::Combo("Multisampling (MSAA)", &msaa, kMsaa, 3)) Set("msaa", kMsaaValues[msaa]);
+    DimWrapped("The game itself asks for 2x or 4x multisampling, as on the Xbox 360. Auto turns it off from 2160p up, where edges are already fine and it is what makes the heaviest scenes miss 60 fps. Off is faster everywhere.");
+
+    Heading("TEXTURE FILTERING");
+    static const char* kAf[] = {"Original (as the game sets it)", "2x", "4x", "8x", "16x"};
+    static const int kAfValues[] = {0, 2, 4, 8, 16};
+    int af = 0;
+    for (int i = 0; i < 5; ++i) af = GetInt("render_anisotropy", 0) == kAfValues[i] ? i : af;
+    if (ImGui::Combo("Anisotropic filtering", &af, kAf, 5)) Set("render_anisotropy", std::to_string(kAfValues[af]));
+    DimWrapped("Sharper textures at steep angles, such as the note highway. This is not anti-aliasing.");
+    ImGui::PopItemWidth();
+  }
+
+  // After the chord opened the menu or the tab changed: the navigation cursor goes to the next widget drawn (the first of the tab).
+  void PlaceCursor() {
+    if (!cursor_request_ || !Gh2MenuPadCapturing()) return;
+    cursor_request_ = false;
+    ImGui::SetKeyboardFocusHere();
+    ImGui::SetNavCursorVisible(true);
+  }
+
   void DrawGraphics() {
+    if (Gh2NativeGpuSelected()) return DrawGraphicsNative();
     ImGui::TextWrapped(
         "The defaults reproduce the original console image (720p). Everything here is optional and costs GPU "
         "performance.");
@@ -777,6 +909,7 @@ class GraphicsDialog : public rex::ui::ImGuiDialog {
   }
 
   void DrawFooter() {
+    DimWrapped("%s", Gh2MenuPadHelp());
     if (ImGui::Button("Save")) {
       SaveMenuSettings(config_path_);
       saved_ = true;
@@ -785,7 +918,7 @@ class GraphicsDialog : public rex::ui::ImGuiDialog {
     std::vector<const char*> kManaged = {"present_effect", "present_dither", "anisotropic_override", "resolution_scale",
                                          "window_width", "window_height", "native_2x_msaa", "gfx_cas_sharpness", "gfx_fsr_softness",
                                          "controller_guitars_first", "show_fps", "startup_mode", "keyboard_player", "keyboard_strum",
-                                         "swap_post_effect"};
+                                         "swap_post_effect", "render_resolution", "msaa", "render_anisotropy", "present_mode"};
     for (int i = 0; i < kGh2KeyActionCount; ++i) kManaged.push_back(kGh2KeyActions[i].cvar);
     if (ImGui::Button("Restore originals")) {
       undo_.clear();  // remember what was set, so the restore can be undone
@@ -836,8 +969,12 @@ class GraphicsDialog : public rex::ui::ImGuiDialog {
   int capture_ = -1;  // key action being rebound, or -1
   std::string key_note_;
   int frames_ = 0;
+  int current_tab_ = 0, want_tab_ = -1;  // the tab shown, and the one the guitar / gamepad asked for
+  int last_tab_shown_ = 0;
+  bool cursor_request_ = false;
+  bool nav_started_ = false;
   bool user_moved_ = false;
-  const float text_scale_ = 1.0f;
+  float text_scale_ = 1.0f;
   bool saved_ = false;
   bool custom_size_ = false;
   std::vector<std::pair<std::string, std::string>> undo_;  // settings before "Restore originals"
@@ -904,7 +1041,7 @@ class HintDialog : public rex::ui::ImGuiDialog {
       return;
     }
     ImGui::GetForegroundDrawList()->AddText(ImVec2(12.0f, io.DisplaySize.y - 28.0f), IM_COL32(255, 210, 70, 220),
-                                            "F2: options (graphics, DLC)");
+                                            "F2, or hold START + SELECT: options (graphics, DLC)");
   }
 
  private:
@@ -914,16 +1051,24 @@ class HintDialog : public rex::ui::ImGuiDialog {
 }  // namespace
 
 // Called before the guest starts (ReXApp::OnPreLaunchModule): installs packages named by --install_content.
+std::atomic<bool> g_audio_queue_auto{false};   // the queue length is ours to adapt (the player did not set audio_maxqframes)
+bool Gh2AudioQueueIsAuto() { return g_audio_queue_auto.load(); }
+
 void Gh2ApplyAudioLatency() {
-  // Two buffers add up: the SDK's queue of 256-sample frames (5.3 ms each, minimum 4) and the output stream's buffer that
-  // SDL asks the sound server for. The game's SDL default is 1024 samples (21 ms) and the SDK's queue is 8 frames (43 ms).
+  // Two buffers add up: the queue of 256-sample frames the game mixes ahead (5.3 ms each) and the output stream's buffer that SDL asks the sound server for.
+  //   low       (default) the shortest the machine can hold: SDL buffer of 128 samples and a queue of 2 frames that GROWS by itself (up to 8) if the output ever starves (hooks_audio.cpp)
+  //   balanced  256 samples, 4 frames        safe  512 samples, 8 frames
+  // The game's SDL default was 1024 samples (21 ms) and the SDK's queue 8 frames (43 ms).
   const std::string mode = rex::cvar::GetFlagByName("audio_latency");
-  const char* sdl_frames = mode == "safe" ? "1024" : mode == "balanced" ? "512" : "256";
-  const char* queue = mode == "safe" ? "16" : mode == "balanced" ? "8" : "4";
+  const char* sdl_frames = mode == "safe" ? "512" : mode == "balanced" ? "256" : "128";
+  const char* queue = mode == "safe" ? "8" : mode == "balanced" ? "4" : "2";
   // SDL 3 keeps its own copy of the environment, so a later setenv() is not seen: use its hint call (an explicit
   // SDL_AUDIO_DEVICE_SAMPLE_FRAMES in the environment still wins over this default-priority hint).
   SDL_SetHint(SDL_HINT_AUDIO_DEVICE_SAMPLE_FRAMES, sdl_frames);
-  if (!rex::cvar::HasNonDefaultValue("audio_maxqframes")) rex::cvar::SetFlagByName("audio_maxqframes", queue);
+  if (!rex::cvar::HasNonDefaultValue("audio_maxqframes")) {
+    rex::cvar::SetFlagByName("audio_maxqframes", queue);
+    g_audio_queue_auto = mode != "safe" && mode != "balanced";
+  }
 }
 
 void Gh2InstallRequestedContent(rex::Runtime* runtime) {
@@ -955,6 +1100,14 @@ void Gh2InstallGraphicsMenu(rex::Runtime* runtime, rex::ui::Presenter* presenter
   for (const char* name : {"present_effect", "present_dither", "gfx_cas_sharpness", "gfx_fsr_softness"})
     rex::cvar::RegisterChangeCallback(name, on_change);
 
+  if (Gh2NativeGpuSelected())
+    rex::ui::RegisterBind("bind_gh2_screenshot", "F9", "Save the game's picture (internal resolution, no menu) to ~/gh2_shots", [] { Gh2NativeScreenshot(); });
+  if (Gh2NativeGpuSelected()) {   // the renderer's own options follow the cvars, whoever changes them (menu, config, console)
+    auto on_render = [](std::string_view, std::string_view) { Gh2ApplyRenderOptions(); };
+    for (const char* name : {"render_resolution", "msaa", "render_anisotropy", "present_mode"}) rex::cvar::RegisterChangeCallback(name, on_render);
+    rex::cvar::RegisterChangeCallback("fullscreen", [](std::string_view, std::string_view) { Gh2RenderOptionsWindowChanged(); });   // auto: the monitor's height, once the window has switched
+  }
+
   // The FPS counter exists only while the option is on (a registered dialog makes the presenter repaint every refresh).
   auto sync_fps = [drawer] {
     const bool want = GetBool("show_fps");
@@ -966,13 +1119,15 @@ void Gh2InstallGraphicsMenu(rex::Runtime* runtime, rex::ui::Presenter* presenter
   });
   sync_fps();
 
-  rex::ui::RegisterBind("bind_gh2_graphics", "F2", "Toggle options menu", [drawer, config_path] {
+  auto toggle_menu = [drawer, config_path] {
     if (g_dialog) {
       g_dialog->RequestClose();
     } else {
       g_dialog = new GraphicsDialog(drawer, config_path);  // owns itself until closed
     }
-  });
+  };
+  rex::ui::RegisterBind("bind_gh2_graphics", "F2", "Toggle options menu", toggle_menu);
+  Gh2MenuPadSetToggle([&context, toggle_menu] { context.CallInUIThread(toggle_menu); });   // START + SELECT held on the guitar or the gamepad
 
   if (std::getenv("GH2_OPEN_GFX_MENU")) g_dialog = new GraphicsDialog(drawer, config_path);  // testing aid
   if (std::getenv("GH2_GFX_TEST_SWITCH")) {  // testing aid: change the output filter from another thread
@@ -1013,6 +1168,21 @@ void Gh2InstallGraphicsMenu(rex::Runtime* runtime, rex::ui::Presenter* presenter
       }
       OpenFolder(Gh2SaveDir().string());
       fprintf(stderr, "TEST_OPEN_SAVES asked to open %s\n", Gh2SaveDir().c_str());
+    }).detach();
+  }
+  if (const char* t = std::getenv("GH2_TEST_SHOT")) {  // testing aid: what F9 does, at the given seconds ("30" or "30,34,38"), counted from the start of the game
+    std::string list = t;
+    std::thread([list] {
+      const auto t0 = std::chrono::steady_clock::now();
+      size_t pos = 0;
+      while (pos < list.size()) {
+        size_t end = list.find(',', pos);
+        if (end == std::string::npos) end = list.size();
+        const double when = std::atof(list.substr(pos, end - pos).c_str());
+        pos = end + 1;
+        std::this_thread::sleep_until(t0 + std::chrono::milliseconds(static_cast<int>(when * 1000)));
+        Gh2NativeScreenshot();
+      }
     }).detach();
   }
   if (const char* t = std::getenv("GH2_TEST_REPORT")) {  // testing aid: write a problem report after N seconds

@@ -1,0 +1,110 @@
+diff --color -ruN a/include/rex/system/xmemory.h b/include/rex/system/xmemory.h
+--- a/include/rex/system/xmemory.h	2026-10-24 14:37:40.515657218 -0300
++++ b/include/rex/system/xmemory.h	2026-10-24 14:39:32.080807558 -0300
+@@ -68,6 +68,25 @@
+ };
+ void SetExternalArena(const ExternalArena* arena);
+ 
++/// Who decides where an allocation goes. GH2: gh2k::mem keeps the allocation registry of the five heaps that own address space (the three virtual ones, the two XEX ones and the
++/// physical parent heap); the page table of BaseHeap stays as the mirror that tracks commit state, protection and write watches. A heap the authority does not handle (the physical
++/// windows 0xA0000000.., which pin their parent's allocations) works as before.
++struct HeapDescriptor {
++  uint32_t base, size, page_size;
++  bool physical_parent;   // the 512 MB physical heap the windows allocate from
++};
++class HeapAuthority {
++ public:
++  virtual ~HeapAuthority() = default;
++  virtual bool Handles(const HeapDescriptor& heap) = 0;
++  // Picks the address of an allocation of `size` bytes (a page multiple) inside [low, high] (inclusive); false if it does not fit.
++  virtual bool AllocRange(const HeapDescriptor& heap, uint32_t low, uint32_t high, uint32_t size, uint32_t alignment, bool top_down, uint32_t* address) = 0;
++  // A reservation at a given address (false: the range is taken).
++  virtual bool AllocFixed(const HeapDescriptor& heap, uint32_t address, uint32_t size) = 0;
++  virtual void Release(const HeapDescriptor& heap, uint32_t address) = 0;
++};
++void SetHeapAuthority(HeapAuthority* authority);   // before Memory::Initialize
++
+ enum SystemHeapFlag : uint32_t {
+   kSystemHeapVirtual = 1 << 0,
+   kSystemHeapPhysical = 1 << 1,
+@@ -278,6 +297,8 @@
+   rex::thread::global_critical_region global_critical_region_;
+   std::recursive_mutex heap_mutex_;
+   std::vector<PageEntry> page_table_;
++  HeapAuthority* authority_ = nullptr;   // non-null when the registered authority handles this heap
++  HeapDescriptor descriptor_{};
+ };
+ 
+ // Normal heap allowing allocations from guest virtual address ranges.
+diff --color -ruN a/src/system/xmemory.cpp b/src/system/xmemory.cpp
+--- a/src/system/xmemory.cpp	2026-10-24 14:37:40.514698515 -0300
++++ b/src/system/xmemory.cpp	2026-10-24 14:39:32.079798110 -0300
+@@ -131,6 +131,9 @@
+   physical_membase_ = nullptr;
+ }
+ 
++static HeapAuthority* g_heap_authority = nullptr;
++void SetHeapAuthority(HeapAuthority* authority) { g_heap_authority = authority; }
++
+ static ExternalArena g_external_arena{};
+ static bool g_has_external_arena = false;
+ void SetExternalArena(const ExternalArena* arena) {
+@@ -1060,6 +1063,11 @@
+   host_address_offset_ = host_address_offset;
+   page_table_.resize(heap_size / page_size);
+   unreserved_page_count_ = uint32_t(page_table_.size());
++  authority_ = nullptr;
++  if (g_heap_authority) {
++    descriptor_ = {heap_base_, heap_size_, page_size_, membase_ != memory_->virtual_membase_};
++    if (g_heap_authority->Handles(descriptor_)) authority_ = g_heap_authority;
++  }
+ }
+ 
+ void BaseHeap::Dispose() {
+@@ -1335,6 +1343,13 @@
+   auto global_lock = AcquireHostPageReconcileLock();
+   std::lock_guard<std::recursive_mutex> heap_lock(heap_mutex_);
+ 
++  if (authority_ && start_page_number < page_table_.size() && page_table_[start_page_number].state == 0) {   // a new reservation, not a commit of an old one
++    if (!authority_->AllocFixed(descriptor_, base_address, page_count << page_size_shift_)) {
++      REXSYS_ERROR("BaseHeap::AllocFixed the host allocator refuses {:08X}", base_address);
++      return false;
++    }
++  }
++
+   // - If we are reserving the entire range requested must not be already
+   //   reserved.
+   // - If we are committing it's ok for pages within the range to already be
+@@ -1444,7 +1459,23 @@
+   uint32_t end_page_number = UINT_MAX;
+   uint32_t page_scan_stride = alignment >> page_size_shift_;
+   uint32_t max_base_page_number = high_page_number + 1 - page_count;
+-  if (top_down) {
++  if (authority_) {   // the host's allocator decides; the page table below only records it
++    uint32_t chosen;
++    if (!authority_->AllocRange(descriptor_, heap_base_ + (low_page_number << page_size_shift_), heap_base_ + (high_page_number << page_size_shift_) + (page_size_ - 1),
++                                page_count << page_size_shift_, alignment, top_down, &chosen)) {
++      REXSYS_ERROR("BaseHeap::Alloc the host allocator found no range");
++      return false;
++    }
++    start_page_number = (chosen - heap_base_) >> page_size_shift_;
++    end_page_number = start_page_number + page_count - 1;
++    for (uint32_t page_number = start_page_number; page_number <= end_page_number; ++page_number) {
++      if (page_table_[page_number].state != 0) {
++        REXSYS_ERROR("BaseHeap::Alloc the host allocator chose a page the page table has reserved (page {})", page_number);
++        authority_->Release(descriptor_, chosen);
++        return false;
++      }
++    }
++  } else if (top_down) {
+     max_base_page_number -= max_base_page_number % page_scan_stride;
+     for (int64_t base_page_number = max_base_page_number; base_page_number >= low_page_number;
+          base_page_number -= page_scan_stride) {
+@@ -1622,6 +1653,7 @@
+   if (out_region_size) {
+     *out_region_size = (base_page_entry.region_page_count << page_size_shift_);
+   }
++  if (authority_) authority_->Release(descriptor_, base_address);
+ 
+   // Release from host not needed as mapping reserves the range for us.
+   // TODO(benvanik): protect with NOACCESS?

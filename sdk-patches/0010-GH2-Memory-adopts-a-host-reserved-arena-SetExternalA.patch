@@ -1,0 +1,103 @@
+diff --color -ruN a/include/rex/system/xmemory.h b/include/rex/system/xmemory.h
+--- a/include/rex/system/xmemory.h	2026-10-24 14:12:11.049231379 -0300
++++ b/include/rex/system/xmemory.h	2026-10-24 14:12:11.052061610 -0300
+@@ -60,6 +60,14 @@
+ 
+ class Memory;
+ 
++/// An address space the host reserved itself (GH2: gh2k::mem::Arena, the same views map_info describes over one memfd). When registered before
++/// Memory::Initialize the memory manager lays its heaps over it instead of creating and mapping its own; it never unmaps or closes it.
++struct ExternalArena {
++  uint8_t* base;       // host address of guest address 0 (the 0x120000000-byte reservation)
++  intptr_t mapping;    // the file descriptor behind the views
++};
++void SetExternalArena(const ExternalArena* arena);
++
+ enum SystemHeapFlag : uint32_t {
+   kSystemHeapVirtual = 1 << 0,
+   kSystemHeapPhysical = 1 << 1,
+@@ -589,6 +597,7 @@
+ 
+   rex::memory::FileMappingHandle mapping_ = rex::memory::kFileMappingHandleInvalid;
+   uint8_t* mapping_base_ = nullptr;
++  bool adopted_ = false;   // the arena belongs to the host (SetExternalArena)
+   union {
+     struct {
+       uint8_t* v00000000;
+diff --color -ruN a/src/system/xmemory.cpp b/src/system/xmemory.cpp
+--- a/src/system/xmemory.cpp	2026-10-24 14:12:11.048428138 -0300
++++ b/src/system/xmemory.cpp	2026-10-24 14:12:11.051094438 -0300
+@@ -122,7 +122,7 @@
+   // Unmap all views and close mapping.
+   if (mapping_ != rex::memory::kFileMappingHandleInvalid) {
+     UnmapViews();
+-    rex::memory::CloseFileMappingHandle(mapping_, file_name_);
++    if (!adopted_) rex::memory::CloseFileMappingHandle(mapping_, file_name_);
+     mapping_base_ = nullptr;
+     mapping_ = rex::memory::kFileMappingHandleInvalid;
+   }
+@@ -131,6 +131,13 @@
+   physical_membase_ = nullptr;
+ }
+ 
++static ExternalArena g_external_arena{};
++static bool g_has_external_arena = false;
++void SetExternalArena(const ExternalArena* arena) {
++  g_has_external_arena = arena != nullptr;
++  if (arena) g_external_arena = *arena;
++}
++
+ bool Memory::Initialize() {
+   file_name_ = fmt::format("xenia_memory_{}", chrono::Clock::QueryHostTickCount());
+ 
+@@ -140,8 +147,10 @@
+   const size_t mapping_size =
+       rex::round_up(static_cast<size_t>(0x120000000ull) + system_allocation_granularity_,
+                     static_cast<size_t>(system_allocation_granularity_));
+-  mapping_ = rex::memory::CreateFileMappingHandle(file_name_, mapping_size,
+-                                                  rex::memory::PageAccess::kReadWrite, false);
++  adopted_ = g_has_external_arena;
++  mapping_ = adopted_ ? g_external_arena.mapping
++                      : rex::memory::CreateFileMappingHandle(file_name_, mapping_size,
++                                                             rex::memory::PageAccess::kReadWrite, false);
+   if (mapping_ == rex::memory::kFileMappingHandleInvalid) {
+     REXSYS_ERROR("Unable to reserve the 4gb guest address space.");
+     assert_always();
+@@ -161,13 +170,17 @@
+   // Attempt to create our views. This may fail at the first address
+   // we pick, so try a few times.
+   mapping_base_ = 0;
+-  for (size_t n = 32; n < 64; n++) {
++  for (size_t n = adopted_ ? 64 : 32; n < 64; n++) {
+     auto mapping_base = reinterpret_cast<uint8_t*>(1ull << n);
+     if (!MapViews(mapping_base)) {
+       mapping_base_ = mapping_base;
+       break;
+     }
+   }
++  if (adopted_) {
++    mapping_base_ = g_external_arena.base;
++    MapViews(mapping_base_);
++  }
+   if (!mapping_base_) {
+     REXSYS_ERROR("Unable to find a continuous block in the 64bit address space.");
+     assert_always();
+@@ -360,6 +373,10 @@
+ 
+ int Memory::MapViews(uint8_t* mapping_base) {
+   assert_true(rex::countof(map_info) == rex::countof(views_.all_views));
++  if (adopted_) {   // the host mapped the views already, exactly as map_info says
++    for (size_t n = 0; n < rex::countof(map_info); n++) views_.all_views[n] = mapping_base + map_info[n].virtual_address_start;
++    return 0;
++  }
+   // 0xE0000000 4 KB offset is emulated via host_address_offset and on the CPU
+   // side if system allocation granularity is bigger than 4 KB.
+   uint64_t granularity_mask = ~uint64_t(system_allocation_granularity_ - 1);
+@@ -378,6 +395,7 @@
+ }
+ 
+ void Memory::UnmapViews() {
++  if (adopted_) return;
+   for (size_t n = 0; n < rex::countof(views_.all_views); n++) {
+     if (views_.all_views[n]) {
+       size_t length = map_info[n].virtual_address_end - map_info[n].virtual_address_start + 1;

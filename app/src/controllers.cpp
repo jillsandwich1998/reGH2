@@ -1,4 +1,5 @@
 #include "controllers.h"
+#include "menu_pad.h"
 
 #include "keyboard.h"
 
@@ -221,9 +222,70 @@ void Gh2SetControllerNoticeTarget(rex::ui::ImGuiDrawer* drawer, rex::ui::Windowe
   g_context = context;
 }
 
+namespace {
+std::atomic<rex::input::InputSystem*> g_input{nullptr};
+}
+
+bool Gh2PadSourceAvailable() { return g_input.load() != nullptr; }
+
+uint32_t Gh2PadGetState(uint32_t user, gh2rt::PadState* out) {
+  auto* input = g_input.load();
+  if (!input) return gh2rt::kPadNotConnected;
+  rex::input::X_INPUT_STATE state{};
+  const auto result = input->GetState(user, &state);
+  if (result != 0) return static_cast<uint32_t>(result);
+  {   // the options menu: the chord to open / close it, and the buttons that drive it while it is open
+    gh2rt::PadState raw;
+    raw.buttons = state.gamepad.buttons;
+    raw.lx = state.gamepad.thumb_lx;
+    raw.ly = state.gamepad.thumb_ly;
+    Gh2MenuPadFeed(user, raw, Gh2UserIsGuitar(user));
+    if (Gh2MenuPadCapturing()) {   // the song behind the menu gets a neutral pad
+      state.gamepad.buttons = 0;
+      state.gamepad.left_trigger = state.gamepad.right_trigger = 0;
+      state.gamepad.thumb_lx = state.gamepad.thumb_ly = state.gamepad.thumb_rx = state.gamepad.thumb_ry = 0;
+    }
+  }
+  if (out) {
+    out->packet = state.packet_number;
+    out->buttons = state.gamepad.buttons;
+    out->left_trigger = state.gamepad.left_trigger;
+    out->right_trigger = state.gamepad.right_trigger;
+    out->lx = state.gamepad.thumb_lx;
+    out->ly = state.gamepad.thumb_ly;
+    out->rx = state.gamepad.thumb_rx;
+    out->ry = state.gamepad.thumb_ry;
+  }
+  return 0;
+}
+
+uint32_t Gh2PadGetCapabilities(uint32_t user, uint32_t flags, gh2rt::PadCaps* out) {
+  auto* input = g_input.load();
+  if (!input) return gh2rt::kPadNotConnected;
+  rex::input::X_INPUT_CAPABILITIES caps{};
+  const auto result = input->GetCapabilities(user, flags, &caps);
+  if (result != 0) return static_cast<uint32_t>(result);
+  if (out) {
+    out->type = caps.type;
+    out->sub_type = caps.sub_type;
+    out->flags = caps.flags;
+    out->gamepad.buttons = caps.gamepad.buttons;
+    out->gamepad.left_trigger = caps.gamepad.left_trigger;
+    out->gamepad.right_trigger = caps.gamepad.right_trigger;
+    out->gamepad.lx = caps.gamepad.thumb_lx;
+    out->gamepad.ly = caps.gamepad.thumb_ly;
+    out->gamepad.rx = caps.gamepad.thumb_rx;
+    out->gamepad.ry = caps.gamepad.thumb_ry;
+    out->left_motor = caps.vibration.left_motor_speed;
+    out->right_motor = caps.vibration.right_motor_speed;
+  }
+  return 0;
+}
+
 void Gh2InstallControllerAssignment(rex::Runtime* runtime) {
   auto* input = runtime ? static_cast<rex::input::InputSystem*>(runtime->input_system()) : nullptr;
   if (!input) return;
+  g_input.store(input);
   auto assignment = std::make_unique<Gh2Assignment>();
   g_assignment = assignment.get();
   input->SetDeviceAssignment(std::move(assignment));

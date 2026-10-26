@@ -7,6 +7,7 @@
 // players 1 and 2; connecting or removing a device pops a short notice on screen.
 #pragma once
 
+#include <gh2rt/host_services.h>
 #include <rex/input/device_assignment.h>
 #include <rex/ui/imgui_drawer.h>
 #include <rex/ui/windowed_app_context.h>
@@ -61,5 +62,9 @@ bool Gh2UserIsGuitar(uint32_t user);
 bool Gh2UserHasRealDevice(uint32_t user);
 // Remembers the UI objects needed to pop connect/disconnect notices (call from OnCreateDialogs).
 void Gh2SetControllerNoticeTarget(rex::ui::ImGuiDrawer* drawer, rex::ui::WindowedAppContext* context);
+// The pad source for the hooks (gh2rt::HostServices::Pad*): the SDK input system's answer for a guest user, in host byte order.
+bool Gh2PadSourceAvailable();
+uint32_t Gh2PadGetState(uint32_t user, gh2rt::PadState* out);
+uint32_t Gh2PadGetCapabilities(uint32_t user, uint32_t flags, gh2rt::PadCaps* out);
 // Installs the assignment into the running input system (call before the guest starts polling).
 void Gh2InstallControllerAssignment(rex::Runtime* runtime);

@@ -1,5 +1,7 @@
 #include "problem_report.h"
 
+#include "native_audio.h"
+
 #include <rex/cvar.h>
 #include <sys/utsname.h>
 
@@ -133,7 +135,7 @@ std::string Gh2WriteProblemReport(std::string& error, bool with_screenshot, bool
   for (const char* name :
        {"present_effect", "present_dither", "gfx_fsr_softness", "gfx_cas_sharpness", "anisotropic_override", "resolution_scale",
         "native_2x_msaa", "swap_post_effect", "fullscreen", "window_width", "window_height", "vsync", "audio_latency",
-        "audio_maxqframes", "startup_mode", "keyboard_player", "keyboard_strum", "show_fps", "controller_guitars_first"})
+        "audio_maxqframes", "audio_output", "input_reader", "startup_mode", "keyboard_player", "keyboard_strum", "show_fps", "controller_guitars_first"})
     r << name << " = " << rex::cvar::GetFlagByName(name) << "\n";
 
   r << Section("Controllers");
@@ -144,6 +146,9 @@ std::string Gh2WriteProblemReport(std::string& error, bool with_screenshot, bool
   }
   r << "keyboard: " << (Gh2KeyboardSlot() < 0 ? std::string("not playing") : "plays as player " + std::to_string(Gh2KeyboardSlot() + 1))
     << "\n";
+
+  r << Section("Audio");
+  r << (Gh2AudioStatsLine().empty() ? std::string("audio: played by the SDK's driver (or not started yet)") : Gh2AudioStatsLine()) << "\n";
 
   r << Section("Frame rate of the game right now");
   Gh2FpsView v;
