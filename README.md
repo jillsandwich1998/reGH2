@@ -2,29 +2,55 @@
 
 <h1 align="center">reGH2</h1>
 
-Static recompilation of Guitar Hero 2 (Xbox 360) for PC. Linux with Vulkan for now.
+Guitar Hero II (Xbox 360) on the PC, rebuilt from your own copy of the game. Linux with Vulkan for now.
 
 > Unofficial fan project, not affiliated with or endorsed by Activision or Harmonix. It contains nothing of the game: you
-> bring your own copy of *Guitar Hero II* (Xbox 360, USA) and it is rebuilt on your computer.
+> bring your own copy of *Guitar Hero II* (Xbox 360, USA) and it is rebuilt on your computer. No game file, and no code
+> made from the game, is ever distributed.
 
-A native port of **Guitar Hero II (Xbox 360)** built with the [ReXGlue SDK](https://github.com/rexglue/rexglue-sdk).
-You need **your own copy of the game**: this project ships no game files and no code generated from them. The installer
-recompiles the game on your computer from the disc image (.iso), the extracted game folder, or `default.xex`.
+**Status: pre-release (0.2.0).** It has been played from start to finish of the Quick Play songs and in several venues on
+one computer (AMD Radeon RX 6600 XT, Mesa RADV, Linux), with a real X-plorer guitar. It is **not** yet known how it behaves on
+NVIDIA or Intel graphics, on SteamOS, or in every game mode. See *Testing and reporting problems* and *Known limits*.
+
+## How it works
+
+The game's PowerPC code is translated to C++ once, on your machine, from your own `default.xex` (static recompilation), and
+compiled with a compiler that comes inside the AppImage. What it runs on is mostly this project's own code:
+
+| Part | Where it comes from |
+|---|---|
+| The game's CPU code | recompiled on your machine with the code generator of the [ReXGlue SDK](https://github.com/rexglue/rexglue-sdk) |
+| Kernel services, memory, threads, file access, synchronisation | this project (`native/kernel`, `native/rt`) |
+| Graphics | this project: a Vulkan renderer (`native/gfx`) that turns the console's command stream into Vulkan; the game's shaders are translated from your copy by [XenosRecomp](https://github.com/hedge-dev/XenosRecomp) |
+| Audio and controllers | this project, on SDL3 (`native/platform`) |
+| Window, in-game menu, saves, achievements, DLC | the ReXGlue SDK (patched, see `sdk-patches/`) |
+
+There is no console emulator in the loop: no CPU, GPU or kernel emulation layer is running.
 
 ## Using it (AppImage)
 
 1. Download `reGH2-x86_64.AppImage`, `chmod +x` it, run it.
 2. Press **Select folder...** and choose the folder that holds your game (the disc image, the extracted game, or the folder with `default.xex`; it is searched for inside), then **Install** (a few minutes: the game is compiled here).
-3. Press **PLAY**. In the game press **F2** for the options (graphics, display mode, controllers, keyboard, DLC, start-up, FPS counter) and to **Quit game** (it asks for confirmation).
+3. Press **PLAY**. The first start also translates the game's shaders for your graphics card (about 15 seconds, once, with a progress window; nothing is downloaded). In the game press **F2** for the options and to **Quit game** (it asks for confirmation).
+
+Nothing else has to be installed or downloaded: the AppImage carries the compiler, the C++ runtime, the shader tools, Python and the
+libraries it needs. The one thing it cannot carry is the Vulkan *driver* for your graphics card (see Requirements).
 
 Command line: `reGH2-x86_64.AppImage install <iso|folder|default.xex>`, `... launch [game options]`, `... status`, `... doctor`, `... report`, `... saves`, `... uninstall`, `... update`.
+
+### In the game
+
+* **F2**: options. *GRAPHICS*: internal resolution (720p to 4K), anti-aliasing (MSAA), anisotropic filtering, vertical sync; display mode; controllers, keyboard, DLC, start-up, FPS counter, audio latency.
+* **Guitar or gamepad in the menus**: hold **START + BACK** for about 0.7 s to open or close the options; strum up/down moves, green selects, red goes back, yellow/orange change tab (gamepad: bumpers change tab, left stick moves).
+* **F9**: saves a screenshot of the game's own picture to `~/gh2_shots`.
+* The game logic runs at 60 frames per second, as on the console; the options change how it is drawn (resolution, vsync), not the speed.
 
 **Updates.** When the launcher opens it looks on GitHub for a newer release (one HTTPS request to the GitHub API, nothing else is sent; a tick box at the bottom of the launcher turns it off, or set `GH2_NO_UPDATE_CHECK=1`). If there is one, a bar offers **Update now**: it downloads the new AppImage, checks it against the release's `SHA256SUMS.txt`, replaces the old one and restarts the launcher. Then **Update game** rebuilds your installed game with the new version from the game files it was built from (a few minutes; saves are kept). Nothing is updated without your click. `reGH2-x86_64.AppImage update` shows whether a newer version exists and `update --apply` downloads it. The checksum comes from the same release, so it detects a damaged download, not a tampered release.
 
 ## Testing and reporting problems
 
-This is an early pre-release and it has been played on a single computer. **It is expected that you play it and test it on your
-own machine**, and that anything that does not work is reported as a [GitHub issue](https://github.com/jillsandwich1998/reGH2/issues/new/choose). A good report lets us
+This is an early pre-release. **It is expected that you play it and test it on your own machine**, and that anything that does
+not work is reported as a [GitHub issue](https://github.com/jillsandwich1998/reGH2/issues/new/choose). A good report lets us
 reproduce and analyse the problem:
 
 1. **Reproduce the problem** (or keep the game open right after it happened).
@@ -40,23 +66,25 @@ reproduce and analyse the problem:
    off): only the game's own picture, never your desktop or other windows. Both are packed into one `.zip` (`report-<date>.zip`): attach that. Your home folder is replaced by `~`; open the file and check it if you want before sharing it.
 4. Include your graphics card, its driver and your Linux distribution if the report cannot tell them (it usually can).
 
-## Saves and uninstalling
+For a problem you can *see* (a wrong picture), press **F9** while it is on screen and attach the PNG as well.
 
-* Your save game, achievements and installed DLC live in `~/.local/share/gh2`. In the game, **F2 > GAME > Open saves folder** opens it; in
-  the launcher, **Open saves folder** does the same and **Export saves...** copies the save game and achievements into a `.zip`
-  (`reGH2-x86_64.AppImage saves --export <folder>` from the command line). The DLC, which can be installed again, is not in the zip.
-* **Uninstall...** in the launcher (or `reGH2-x86_64.AppImage uninstall`) removes the installed game, its shortcuts and its cache. It keeps
-  your saves, DLC and achievements unless you say otherwise, and it never touches your own copy of the game. Close the game first.
+## Known limits
+
+* Tested on one machine and one graphics card. NVIDIA, Intel, Steam Deck / SteamOS and other distributions are untested; reports are welcome.
+* Not measured: the time from pressing a fret to the sound and to the picture (the audio buffers are small, see *Tools for finding performance problems*).
+* The graphics memory grows as new venues and songs are loaded (textures are kept, not freed): about 1.0 GB at 4K after four songs on the test machine.
+* A short pause when a song loads, between the song screens, is part of how the game itself loads.
+* Only Quick Play was tested systematically; Career, Practice, co-op and DLC songs need more play-testing.
+* Windows is not supported yet.
 
 ## Requirements
 
 Linux x86-64 (glibc 2.35 or newer; SteamOS / Steam Deck included), a Vulkan 1.2 GPU with a current Mesa or NVIDIA driver,
-about 4 GB of free disk space for the build and your game files, and a few GB of RAM while compiling.
+about 4 GB of free disk space for the build and your game files, and a few GB of RAM while compiling. While playing, the game process
+used about 0.7 GB of RAM and 0.4 to 1.2 GB of graphics memory on the test machine, depending on the resolution.
 
-Nothing else needs installing by hand. The AppImage carries the compiler, the C++ runtime, the X11 / Wayland client
-libraries and the Vulkan loader (host copies are preferred when present). The one thing it cannot carry is the Vulkan
-*driver* for your GPU, which is part of your system. If none is found, the launcher (and `doctor` / `launch` on the
-command line) says so, shows the package for your distribution and GPU, and installs it only if you agree, asking for
+The AppImage cannot carry the Vulkan *driver* for your GPU, which is part of your system. If none is found, the launcher (and `doctor` /
+`launch` on the command line) says so, shows the package for your distribution and GPU, and installs it only if you agree, asking for
 your administrator password:
 
 | Distribution family | AMD / Intel | NVIDIA |
@@ -66,40 +94,47 @@ your administrator password:
 | Arch, CachyOS, Manjaro, ... | `vulkan-radeon` / `vulkan-intel` | `nvidia-utils` |
 | openSUSE | `libvulkan_radeon` / `libvulkan_intel` | the NVIDIA driver |
 
-Frame pacing: on Linux 6.11 or newer the SDK asks the kernel directly about memory protections; older kernels use a table the SDK keeps itself (measured here: late frames 7.9% with the old file-parsing path, 0.6% with the table, same as the kernel query).
-
 The game also needs a working audio server (PipeWire, PulseAudio or ALSA) and a display (Wayland or X11), as any desktop has.
 
-## Building from source
+## Saves and uninstalling
 
-```sh
-scripts/build-sdk.sh ~/gh2-sdk                         # patched ReXGlue SDK (pinned commit + sdk-patches/)
-scripts/gh2-recomp --sdk ~/gh2-sdk install <your game>   # codegen + build, needs clang >= 20, cmake, ninja
-scripts/gh2-recomp --sdk ~/gh2-sdk launch
-```
-The AppImage is built by `packaging/` (Ubuntu 22.04 container, so it runs on older distributions as well).
-
-## Supported game version
-
-`default.xex` with SHA-1 `b90b864487e6291761b207c8d0064e9a0779bdee` (Xbox 360, title 415607E7). Other versions are refused
-unless you pass `--force`.
-
-## Notes
-
-DLC (Xbox Live LIVE/CON packages) can be installed from the in-game menu, one by one or from a whole folder.
-
-License: MIT (see `LICENSE`); third-party notices: `THIRD_PARTY_NOTICES.md`.
-
-## Icon
-
-`packaging/icon.svg` (and the rendered `icon.png`) is original artwork made for this project and covered by the same MIT licence.
-This is an unofficial project, not affiliated with or endorsed by Activision or Harmonix.
+* Your save game, achievements and installed DLC live in `~/.local/share/gh2`. In the game, **F2 > GAME > Open saves folder** opens it; in
+  the launcher, **Open saves folder** does the same and **Export saves...** copies the save game and achievements into a `.zip`
+  (`reGH2-x86_64.AppImage saves --export <folder>` from the command line). The DLC, which can be installed again, is not in the zip.
+* **Uninstall...** in the launcher (or `reGH2-x86_64.AppImage uninstall`) removes the installed game, its shortcuts and its cache. It keeps
+  your saves, DLC and achievements unless you say otherwise, and it never touches your own copy of the game. Close the game first.
+* DLC (Xbox Live LIVE/CON packages) can be installed from the in-game menu, one by one or from a whole folder.
 
 ## Tools for finding performance problems
 
 * **FPS counter:** F2 > GAME > *Show FPS counter*.
 * **Slowdown log:** whenever the game itself runs below about 55 fps for a second, or one frame takes over 50 ms, a line with the
   time goes to `logs/perf.log` next to the game. The problem report includes it.
-* **Audio:** the audio buffers are the smallest that worked well on the test machine (about 27 ms in total). If you hear crackling,
+* **Audio:** the buffers are very small and grow by themselves if the sound device cannot keep up. If you hear crackling,
   start the game with `--audio_latency=balanced` (or `safe`) and tell us about your hardware.
+* **Graphics:** if the picture is wrong at a high resolution, try `--msaa=on` or a lower resolution and report it with an F9 screenshot.
 
+## Supported game version
+
+`default.xex` with SHA-1 `b90b864487e6291761b207c8d0064e9a0779bdee` (Xbox 360, title 415607E7). Other versions are refused
+unless you pass `--force`.
+
+## Building from source
+
+For development; players use the AppImage, which already contains everything below.
+
+```sh
+scripts/build-sdk.sh ~/gh2-sdk                           # patched ReXGlue SDK (pinned commit + sdk-patches/)
+native/third_party/fetch.sh                              # XenosRecomp (patched with native/third_party/patches)
+scripts/gh2-recomp --sdk ~/gh2-sdk install <your game>   # codegen + build, needs clang >= 20, cmake, ninja
+scripts/gh2-recomp --sdk ~/gh2-sdk launch
+```
+The layout of the native runtime and renderer, and the rules that keep them apart from the SDK, are in `native/README.md` and
+`native/rt/abi/`. The AppImage is built by `packaging/` (Ubuntu 22.04 container, so it runs on older distributions as well).
+
+## License
+
+MIT (see `LICENSE`); third-party notices: `THIRD_PARTY_NOTICES.md`. The ReXGlue SDK, XenosRecomp, SDL3, Dear ImGui and the other
+components keep their own licences.
+
+`packaging/icon.svg` (and the rendered `icon.png`) is original artwork made for this project and covered by the same MIT licence.
