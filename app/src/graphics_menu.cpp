@@ -175,7 +175,7 @@ void SaveMenuSettings(const std::filesystem::path& path) {
     out += std::string(kGh2KeyActions[i].cvar) + " = \"" + Get(kGh2KeyActions[i].cvar) + "\"\n";
   for (const char* name : {"present_dither", "fullscreen", "native_2x_msaa", "anisotropic_override", "resolution_scale", "render_anisotropy",
                            "window_width", "window_height", "gfx_cas_sharpness", "gfx_fsr_softness", "controller_guitars_first", "show_fps"})
-    out += std::string(name) + " = " + Get(name) + "\n";
+    if (!Get(name).empty()) out += std::string(name) + " = " + Get(name) + "\n";  // cvars of the SDK's GPU module are unregistered with --gpu=native: "key = " is invalid TOML and the whole file is ignored
   std::ofstream(path, std::ios::trunc) << out;
 }
 
