@@ -192,6 +192,30 @@ class Installer:
         if not os.path.exists(os.path.join(lib, "librexruntime.so")):
             raise InstallError("librexruntime.so not found (SDK at %s)" % self.sdk)
 
+    def disk_python(self, appdir):
+        """A copy of the AppImage's portable Python on the ordinary disk (<prefix>/app/shader-python), for the shader pipeline.
+        Run from the AppImage's own mount, a page of the interpreter that has to be read again while the game uses memory can fail
+        and kill it with SIGBUS (seen on a first start: coredump in python3.12 right after the recompile stage). Returns the
+        interpreter path, or None if the copy cannot be made (the mounted one is used then)."""
+        src = os.path.join(appdir, "usr", "python")
+        dest = os.path.join(self.prefix, "app", "shader-python")
+        exe = os.path.join(dest, "bin", "python3")
+        try:
+            stamp = str(os.stat(os.path.join(src, "bin", "python3")).st_size)
+            if os.path.exists(exe) and open(os.path.join(dest, ".version")).read() == stamp:
+                return exe
+            tmp = dest + ".new"
+            shutil.rmtree(tmp, ignore_errors=True)
+            shutil.copytree(src, tmp, symlinks=True, ignore=shutil.ignore_patterns(
+                "__pycache__", "include", "share", "test", "tests", "idlelib", "tkinter", "turtledemo", "ensurepip", "lib2to3", "site-packages"))
+            with open(os.path.join(tmp, ".version"), "w") as f:
+                f.write(stamp)
+            shutil.rmtree(dest, ignore_errors=True)
+            os.replace(tmp, dest)
+            return exe
+        except (OSError, shutil.Error):
+            return None
+
     @staticmethod
     def shader_tools_version(tools):
         """Changes whenever the scripts, the patches or the XenosRecomp binary of the bundle change."""
@@ -380,7 +404,7 @@ class Installer:
         e["LD_LIBRARY_PATH"] = ":".join(libs + ([e["LD_LIBRARY_PATH"]] if e.get("LD_LIBRARY_PATH") else []))
         appdir = os.environ.get("APPDIR")   # started from the AppImage: its portable Python makes the shader cache at the first start (the host may have no python3)
         if appdir and os.path.exists(os.path.join(appdir, "usr", "python", "bin", "python3")):
-            e["GH2_PYTHON"] = os.path.join(appdir, "usr", "python", "bin", "python3")
+            e["GH2_PYTHON"] = self.disk_python(appdir) or os.path.join(appdir, "usr", "python", "bin", "python3")
         e["REX_GAME_DATA_ROOT"] = (self.status() or {}).get("game_dir", "")
         e["REX_GPU_PLUGIN"] = "xenos"
         return e

@@ -187,7 +187,7 @@ void RunBuild(std::vector<std::string> args, fs::path work, std::string dir) {
   waitpid(pid, &status, 0);
   std::error_code ec;
   if (!(WIFEXITED(status) && WEXITSTATUS(status) == 0 && fs::exists(work / "cache" / "shaders.pak")))
-    return fail(std::string("the shader pipeline failed (exit ") + std::to_string(WIFEXITED(status) ? WEXITSTATUS(status) : -1) + ")" + (last_error.empty() ? "" : ": " + last_error));
+    return fail(std::string("the shader pipeline failed (exit ") + (WIFEXITED(status) ? std::to_string(WEXITSTATUS(status)) : std::string("killed by signal ") + std::to_string(WTERMSIG(status)) + " " + strsignal(WTERMSIG(status))) + ")" + (last_error.empty() ? "" : ": " + last_error));
   fs::create_directories(dir, ec);
   for (const char* name : {"shaders.pak", "manifest.json", "index.tsv"}) {
     const fs::path from = work / "cache" / name, to = fs::path(dir) / name, tmp = fs::path(dir) / (std::string(name) + ".tmp");
