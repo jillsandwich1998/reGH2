@@ -427,10 +427,13 @@ def main():
         elif a.startswith("--prefix="):
             args["prefix"] = a[9:]
     try:  # keep the shortcuts valid if the AppImage was moved; add the menu entry to installs made before it existed
-        if Installer(args.get("prefix")).status() and not os.path.exists(shortcut.menu_entry_path()) and os.environ.get("APPIMAGE"):
-            shortcut.create(os.environ["APPIMAGE"], os.path.join(os.environ.get("APPDIR", ""), "gh2-recomp.png"),
+        inst = Installer(args.get("prefix"))
+        icon = os.path.join(os.environ.get("APPDIR", ""), "gh2-recomp.png")
+        if inst.status() and not os.path.exists(shortcut.menu_entry_path()) and os.environ.get("APPIMAGE"):
+            shortcut.create(shortcut.keep_copy(os.environ["APPIMAGE"], inst.prefix, lambda *_: None), icon,
                             desktop_icon=False, log=lambda *_: None)
-        shortcut.refresh(os.environ.get("APPIMAGE"), os.path.join(os.environ.get("APPDIR", ""), "gh2-recomp.png"))
+        if inst.status():
+            shortcut.refresh(os.environ.get("APPIMAGE"), icon, inst.prefix)
     except OSError:
         pass
     Launcher(args).mainloop()

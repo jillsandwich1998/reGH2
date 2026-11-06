@@ -230,12 +230,14 @@ class Installer:
         return h.hexdigest()
 
     def make_shortcut(self):
-        """Menu entry + desktop icon; only when running from an AppImage (the shortcut starts that file)."""
+        """Menu entry + desktop icon; only when running from an AppImage. The shortcut starts the copy of it kept in the
+        install folder, so the game still opens when the downloaded file is deleted."""
         appimage = os.environ.get("APPIMAGE")
         if not appimage:
             return
         appdir = os.environ.get("APPDIR", "")
         try:
+            appimage = shortcut.keep_copy(appimage, self.prefix, self.log)
             shortcut.create(appimage, os.path.join(appdir, "gh2-recomp.png"), self.desktop_icon, self.log)
         except OSError as e:
             self.log("Could not create the shortcut: %s" % e)

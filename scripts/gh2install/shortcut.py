@@ -6,6 +6,7 @@ import subprocess
 NAME = "gh2-recomp"
 DESKTOP_FILE = "reGH2.desktop"
 LEGACY_DESKTOP_FILES = ("Guitar Hero II.desktop", "Recomp Hero 2.desktop")  # names used before the project was named
+COPY_NAME = "reGH2-x86_64.AppImage"  # the copy kept inside the install folder, so the shortcuts survive the downloaded file being deleted
 
 
 def _data_home():
@@ -59,6 +60,37 @@ def _entry(appimage, icon):
     ])
 
 
+def keep_copy(appimage, prefix, log=print):
+    """Keeps a copy of the running AppImage in the install folder and returns the path the shortcuts must start. The
+    copy is made again when the running file is a different one (a newer download). If it cannot be made, the running
+    file's own path is returned."""
+    dest = os.path.join(prefix, COPY_NAME)
+    try:
+        if os.path.exists(dest) and os.path.samefile(appimage, dest):
+            return dest  # already started from the copy
+        st = os.stat(appimage)
+        stamp = "%d %d" % (st.st_size, st.st_mtime_ns)
+        stamp_path = dest + ".stamp"
+        try:
+            if os.path.exists(dest) and (open(stamp_path).read() == stamp or st.st_mtime_ns <= os.stat(dest).st_mtime_ns):
+                return dest  # same file as last time, or older than the copy (e.g. the copy was updated in place)
+        except OSError:
+            pass
+        os.makedirs(prefix, exist_ok=True)
+        tmp = dest + ".new"
+        shutil.copyfile(appimage, tmp)
+        os.chmod(tmp, 0o755)
+        os.utime(tmp, ns=(st.st_atime_ns, st.st_mtime_ns))  # the copy keeps the file's date: later files are compared with it, not with the time of the copy
+        os.replace(tmp, dest)
+        with open(stamp_path, "w") as f:
+            f.write(stamp)
+        log("Copied the AppImage to " + dest)
+        return dest
+    except OSError as e:
+        log("Could not copy the AppImage into %s (%s); the shortcuts will start %s" % (prefix, e, appimage))
+        return appimage
+
+
 def create(appimage, icon_source=None, desktop_icon=True, log=print):
     """Writes the menu entry (and the desktop icon). `appimage` is the path the shortcut starts."""
     icon = NAME
@@ -106,13 +138,15 @@ def remove(log=print):
             log("Removed " + p)
 
 
-def refresh(appimage, icon_source=None):
-    """Keeps the shortcuts pointing at the AppImage's current location (it may have been moved)."""
+def refresh(appimage, icon_source=None, prefix=None):
+    """Keeps the shortcuts pointing at the AppImage copy in the install folder (made again if the running file is a
+    newer one). Without `prefix` they follow the running file."""
     path = menu_entry_path()
     if not os.path.exists(path) or not appimage:
         return
-    if _quote(appimage) + " launch" in open(path).read():
+    target = keep_copy(appimage, prefix, log=lambda *_: None) if prefix else appimage
+    if _quote(target) + " launch" in open(path).read():
         return
     desk = desktop_dir()
-    create(appimage, icon_source, desktop_icon=bool(desk and os.path.exists(os.path.join(desk, DESKTOP_FILE))),
+    create(target, icon_source, desktop_icon=bool(desk and os.path.exists(os.path.join(desk, DESKTOP_FILE))),
            log=lambda *_: None)
