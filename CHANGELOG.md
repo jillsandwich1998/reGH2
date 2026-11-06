@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.1 (pre-release)
+
+**Fixed**
+* The application-menu entry and the desktop icon started the downloaded AppImage, so deleting it (or moving it away) stopped the game from opening. The installer now keeps a copy of the AppImage in the install folder (`~/.local/share/gh2-recomp/reGH2-x86_64.AppImage`, 231 MB) and the shortcuts start that copy. It is refreshed when a newer AppImage is run and removed by the uninstaller. To get this on an existing install, open the new AppImage once.
+
 ## 0.2.0 (pre-release)
 
 The game now runs on this project's own runtime and renderer instead of the emulation layers of the ReXGlue SDK.

@@ -8,7 +8,7 @@ Guitar Hero II (Xbox 360) on the PC, rebuilt from your own copy of the game. Lin
 > bring your own copy of *Guitar Hero II* (Xbox 360, USA) and it is rebuilt on your computer. No game file, and no code
 > made from the game, is ever distributed.
 
-**Status: pre-release (0.2.0).** It has been played in Quick Play and in Career mode up to the fourth venue, with a real
+**Status: pre-release (0.2.1).** It has been played in Quick Play and in Career mode up to the fourth venue, with a real
 X-plorer guitar, on one computer (AMD Radeon RX 6600 XT, Mesa RADV, Linux). It has **not** been played from start to finish, so
 nothing here is promised to work in every song, venue or game mode. It is also **not** known how it behaves on NVIDIA or Intel
 graphics or on SteamOS. See *Testing and reporting problems* and *Known limits*.
