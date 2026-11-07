@@ -14,10 +14,16 @@
 
 #include "impl.h"
 #include "tex_hash.h"
+#include "write_watch.h"
 
 namespace gh2render {
 
 namespace {
+
+constexpr uint64_t kWatchSafetyFrames = 64;   // power of two: every texture is hashed at least this often, whatever the watch says
+constexpr uint64_t kWatchHotWindow = 16;      // writes this close to each other count as a streak...
+constexpr uint32_t kWatchHotStreak = 3;       // ...and a streak this long sends the texture back to hashing every frame
+constexpr uint64_t kWatchHotFrames = 600;     // for this long
 
 constexpr uint32_t kGuestMemoryLimit = 0x20000000;   // physical memory: 512 MB
 constexpr uint32_t kMaxLevels = 14;
@@ -192,13 +198,50 @@ uint32_t Renderer::Impl::PrepareTexture(const uint32_t* f, uint32_t* sampler_ind
   TextureEntry& e = *slot;
   e.used_frame = frame;
 
-  if (created || e.checked_frame != frame) {
+  // Has the guest rewritten any level? Pages the write watch guards answer without reading the texture, except for a full hash now and then: writes it cannot see exist.
+  static const bool watch = WriteWatch::Start(config.memory.virt);
+  auto level_bytes = [&](uint32_t level) { return static_cast<uint64_t>(stored[level].source_bytes + (level == 0 ? face_stride * (faces - 1) : 0)); };
+  bool watch_commit = false;
+  uint32_t watch_epoch = 0;
+  bool check = created;
+  bool safety_hash = false;
+  if (!created && e.checked_frame != frame) {
     e.checked_frame = frame;
+    check = true;
+    if (watch && e.watched) {
+      bool written = false;
+      for (uint32_t level = 0; level < stored_levels && !written; ++level)
+        written = WriteWatch::Written(static_cast<uint32_t>(stored[level].source), level_bytes(level), e.watch_epoch);
+      safety_hash = !written;
+      if (written) {
+        e.written_streak = frame - e.last_written_frame <= kWatchHotWindow ? e.written_streak + 1 : 0;
+        e.last_written_frame = frame;
+        if (e.written_streak >= kWatchHotStreak) {
+          e.hot_until = frame + kWatchHotFrames;
+          e.written_streak = 0;
+          ++tex_watch_hot;
+        }
+      } else if (((frame + e.watch_salt) & (kWatchSafetyFrames - 1)) != 0) {
+        check = false;
+        ++tex_watch_skips;
+      }
+    }
+  }
+  if (created) e.checked_frame = frame;
+
+  if (check) {
+    e.watched = false;   // until this check has finished: a staging failure below must be retried
+    if (created) e.watch_salt = static_cast<uint32_t>(physical >> 12) * 2654435761u >> 16;
+    if (watch && frame >= e.hot_until) {
+      watch_epoch = WriteWatch::Epoch();   // before arming and before reading: a write from here on is reported
+      watch_commit = true;
+      for (uint32_t level = 0; level < stored_levels; ++level) watch_commit = WriteWatch::Arm(static_cast<uint32_t>(stored[level].source), level_bytes(level)) && watch_commit;
+    }
     const auto hash_start = std::chrono::steady_clock::now();
-    uint64_t hash = 1469598103934665603ull;   // has the guest rewritten any level?
+    uint64_t hash = 1469598103934665603ull;
     for (uint32_t level = 0; level < stored_levels; ++level)
-      hash = (hash ^ HashTextureBytes(config.memory.Physical(static_cast<uint32_t>(stored[level].source)),
-                                                        static_cast<size_t>(stored[level].source_bytes + (level == 0 ? face_stride * (faces - 1) : 0)))) * 1099511628211ull;
+      hash = (hash ^ HashTextureBytes(config.memory.Physical(static_cast<uint32_t>(stored[level].source)), static_cast<size_t>(level_bytes(level)))) * 1099511628211ull;
+    if (safety_hash && hash != e.hash) ++tex_watch_missed;
     const auto decode_start = std::chrono::steady_clock::now();
     tex_hash_ns += static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(decode_start - hash_start).count());
     if (created || hash != e.hash) {
@@ -271,6 +314,8 @@ uint32_t Renderer::Impl::PrepareTexture(const uint32_t* f, uint32_t* sampler_ind
       }
       e.layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     }
+    e.watched = watch_commit;
+    e.watch_epoch = watch_epoch;
   }
   if (e.layout != VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) return none(5);   // never uploaded (staging was full)
 

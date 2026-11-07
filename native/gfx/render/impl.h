@@ -91,6 +91,12 @@ struct TextureEntry {
   uint64_t hash = 0;
   uint64_t checked_frame = ~0ull;
   uint64_t used_frame = 0;
+  bool watched = false;            // the pages were armed at the last check: unwritten pages mean an unchanged texture
+  uint32_t watch_epoch = 0;
+  uint32_t watch_salt = 0;         // spreads the safety hashes over the frames
+  uint32_t written_streak = 0;     // written in checks close to each other: see kWatchHotStreak
+  uint64_t last_written_frame = 0;
+  uint64_t hot_until = 0;          // rewritten all the time (or sharing pages with what is): hashed every frame until then, as without the watch
   uint32_t levels = 1;
   struct View {
     uint32_t swizzle;
@@ -256,6 +262,7 @@ struct Renderer::Impl {
   uint64_t skip_reasons[12] = {};
   uint32_t draw_in_frame = 0;
   std::atomic<uint64_t> memexport_draws{0}, dependent_fetch_draws{0}, dependent_fetch_bytes{0}, up_vertex_bytes{0}, up_const_bytes{0}, up_index_bytes{0}, up_const_hits{0}, up_const_total{0}, clear_replays{0}, clears_skipped{0}, alpha_to_mask_draws{0}, snapshot_mips_made{0}, clears_reopened{0}, vs_loads{0}, vs_loads_changed{0}, immediate_loads{0}, immediate_unknown{0};
+  std::atomic<uint64_t> tex_watch_skips{0}, tex_watch_missed{0}, tex_watch_hot{0};   // checks the write watch answered; safety hashes that found a change it had not seen; textures that went back to hashing
   std::atomic<uint64_t> tex_hash_ns{0}, tex_decode_ns{0}, tex_decode_bytes{0};   // textures: re-hashing of every texture in use each frame; decoding (tiling, endian) of the ones that changed
   std::atomic<uint64_t> microcode_changed{0}, microcode_checked{0};   // draws whose microcode in memory differs from what IM_LOAD saw (the library re-patched it before the draw ran)
   std::atomic<uint64_t> tex_fallbacks[9] = {};   // texture bindings that read the fallback texel, by reason: type, 3D/format, range, image, staging, upload, heap, view, resolved heap   // issued draws so far in this frame (GH2_RENDER_ONLY)
