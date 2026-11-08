@@ -1,5 +1,5 @@
 # gh2render: the native renderer (Phase 3): a gh2gpu::Sink that draws with Vulkan (gh2vk) and the translated shaders of the shader cache. Plain C++17: no SDK.
-add_library(gh2render STATIC renderer.cpp device.cpp targets.cpp textures.cpp draw.cpp pipelines.cpp overlay.cpp formats.cpp tex_hash.cpp tex_hash_avx2.cpp)
+add_library(gh2render STATIC renderer.cpp device.cpp targets.cpp textures.cpp draw.cpp pipelines.cpp overlay.cpp formats.cpp tex_hash.cpp tex_hash_avx2.cpp write_watch.cpp)
 target_include_directories(gh2render PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include" PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(gh2render PUBLIC gh2gpu gh2vk gh2gfx_guest_d3d)
 target_compile_options(gh2render PRIVATE -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers)
@@ -18,3 +18,5 @@ set_source_files_properties(tex_hash_avx2.cpp PROPERTIES COMPILE_OPTIONS "-mavx2
 add_executable(gh2_render_selftest EXCLUDE_FROM_ALL render_selftest.cpp formats.cpp)
 target_include_directories(gh2_render_selftest PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(gh2_render_selftest PRIVATE gh2vk)
+add_executable(gh2_write_watch_selftest EXCLUDE_FROM_ALL write_watch_selftest.cpp write_watch.cpp)
+target_link_libraries(gh2_write_watch_selftest PRIVATE ${CMAKE_DL_LIBS})

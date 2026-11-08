@@ -9,6 +9,7 @@
 #include <unordered_map>
 
 #include "impl.h"
+#include "write_watch.h"
 
 namespace gh2render {
 
@@ -528,13 +529,18 @@ std::string Renderer::StatsLine() const {
     line += m;
     std::snprintf(m, sizeof m, "\n    clears replayed on the same EDRAM base at another sample count: %llu; clears skipped because the image already held that value: %llu; passes reopened for a pending clear: %llu; snapshot mip chains made: %llu; draws asking for alpha-to-mask: %llu", (unsigned long long)impl_->clear_replays.load(), (unsigned long long)impl_->clears_skipped.load(), (unsigned long long)impl_->clears_reopened.load(), (unsigned long long)impl_->snapshot_mips_made.load(), (unsigned long long)impl_->alpha_to_mask_draws.load());
     line += m;
-    char p[320];
+    char p[384];
     std::snprintf(p, sizeof p, "\n    pipelines: %llu listed at start; %llu built ahead of time (%.0f ms of work), %llu of them used (waited %.1f ms in all); %llu built by a draw (%.0f ms in all, longest %.1f ms)",
                   (unsigned long long)impl_->pipelines_listed_at_start.load(), (unsigned long long)impl_->pipelines_ahead.load(), impl_->ahead_ns.load() / 1e6, (unsigned long long)impl_->ahead_hits.load(),
                   impl_->ahead_wait_ns.load() / 1e6, (unsigned long long)impl_->pipelines_on_demand.load(), impl_->on_demand_ns.load() / 1e6, impl_->on_demand_max_ns.load() / 1e6);
     line += p;
     std::snprintf(p, sizeof p, "\n    textures: %.0f ms re-hashing what the draws use (every frame), %.0f ms decoding %.0f MB of changed ones", impl_->tex_hash_ns.load() / 1e6, impl_->tex_decode_ns.load() / 1e6,
                   impl_->tex_decode_bytes.load() / 1048576.0);
+    line += p;
+    const WriteWatch::Stats watch = WriteWatch::GetStats();
+    std::snprintf(p, sizeof p, "\n    write watch: %s; %llu checks answered without reading, %llu pages written (faults) and %llu released (file reads, protection changes), %llu pages armed, %llu refused, %llu textures back to hashing, %llu changes only the safety hash saw",
+                  WriteWatch::Active() ? "on" : "off", (unsigned long long)impl_->tex_watch_skips.load(), (unsigned long long)watch.faults, (unsigned long long)watch.touches, (unsigned long long)watch.armed_pages,
+                  (unsigned long long)watch.arm_failures, (unsigned long long)impl_->tex_watch_hot.load(), (unsigned long long)impl_->tex_watch_missed.load());
     line += p;
   }
   {
