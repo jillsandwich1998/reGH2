@@ -1,0 +1,25 @@
+diff --git a/src/core/memory_posix.cpp b/src/core/memory_posix.cpp
+index f99e737..a04d3b5 100644
+--- a/src/core/memory_posix.cpp
++++ b/src/core/memory_posix.cpp
+@@ -414,6 +414,20 @@ static bool IsRangeFullyMapped(void* base_address, size_t length) {
+     return false;
+   }
+ 
++  // GH2: walk the range one mapping at a time with the same lookup as the protection queries (PROCMAP_QUERY, or the table on
++  // older kernels). Parsing all of /proc/self/maps here, for every commit on an existing reservation, cost the guest's physical
++  // allocations (MmAllocatePhysicalMemoryEx) a parse of the whole file each: the menus stalled for up to 150 ms while a screen loaded.
++  if (GetTableMode() != TableMode::kParse) {
++    uintptr_t cursor = begin;
++    while (cursor < end) {
++      LinuxMapEntry e;
++      if (!FindEntryForAddress(reinterpret_cast<void*>(cursor), e) || e.end <= cursor)
++        return false;  // gap found
++      cursor = e.end;
++    }
++    return true;
++  }
++
+   std::ifstream maps("/proc/self/maps");
+   if (!maps.is_open())
+     return false;
