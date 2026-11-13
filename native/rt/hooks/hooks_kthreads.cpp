@@ -20,9 +20,22 @@
 #include <gh2k/thread.h>
 #include <gh2rt/boundary_trace.h>
 #include <gh2rt/host_services.h>
+#include <gh2k/host_addr.h>
+#include <gh2os/os.h>
+
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#else
 #include <pthread.h>
 #include <signal.h>
 #include <unistd.h>
+#endif
 
 #include <atomic>
 #include <chrono>
@@ -77,7 +90,9 @@ struct NThread {
   std::condition_variable cv;   // the suspend gate
   int refs = 0;                 // 1 while the host thread runs + 1 for the handle (if any)
   int host_priority = 0;
+#ifndef _WIN32
   pthread_t host{};
+#endif
   bool alive = true;   // the host thread has not finished (guarded by State::mu)
   std::function<void(PPCContext&, uint8_t*)> body;   // set: run this instead of a guest entry point
   std::function<void()> on_finish;                    // runs once when the thread is over, however it ends
@@ -116,12 +131,12 @@ bool Active() {
 
 uint32_t Be32(const uint8_t* b, uint32_t a) {
   uint32_t v;
-  std::memcpy(&v, b + a, 4);
+  std::memcpy(&v, gh2k::HostAddr(b, a), 4);
   return __builtin_bswap32(v);
 }
 void PutBe32(uint8_t* b, uint32_t a, uint32_t v) {
   v = __builtin_bswap32(v);
-  std::memcpy(b + a, &v, 4);
+  std::memcpy(gh2k::HostAddr(b, a), &v, 4);
 }
 
 NThread* Find(uint32_t kthread) {
@@ -232,7 +247,7 @@ void RunThread(NThread* t) {
   ctx.r13.u64 = t->pcr;
   const uint64_t stash = reinterpret_cast<uint64_t>(&ctx);
   std::memcpy(base + t->pcr + kt::pcr::kHostStash, &stash, 8);   // the host's view of this thread's context (the runtime keeps the same there)
-  if (!t->name.empty()) pthread_setname_np(pthread_self(), t->name.substr(0, 15).c_str());
+  if (!t->name.empty()) gh2os::SetCurrentThreadName(t->name.c_str());
   Gate(t);
   if (t->body) {   // a host service on a guest thread: no entry point, no exit code
     t->body(ctx, base);
@@ -261,6 +276,30 @@ void RunThread(NThread* t) {
   Finish(t, want_exit_code ? ctx.r3.u32 : 0);
 }
 
+#ifdef _WIN32
+// ExTerminateThread does not return: on Windows it unwinds the host stack with this exception, caught at the thread's entry (the frames of the translated code in between are
+// plain x64 frames with unwind data; none of them has cleanups to run).
+struct ThreadExit {};
+
+DWORD WINAPI ThreadMain(LPVOID arg) {
+  NThread* t = static_cast<NThread*>(arg);
+  try {
+    RunThread(t);
+  } catch (const ThreadExit&) {
+  }
+  CleanupThunk(t);   // (Finish is a no-op by now when the thread ended by itself; the runtime binding is released)
+  return 0;
+}
+
+// A host thread with the 16 MB stack the translated code needs (it keeps its frames on the host stack), detached. Returns false when it cannot be created.
+bool StartHostThread(NThread* t) {
+  HANDLE h = CreateThread(nullptr, 16u << 20, ThreadMain, t, STACK_SIZE_PARAM_IS_A_RESERVATION, nullptr);
+  if (!h) return false;
+  CloseHandle(h);
+  return true;
+}
+[[noreturn]] void ExitCurrentThread() { throw ThreadExit{}; }
+#else
 void* ThreadMain(void* arg) {
   NThread* t = static_cast<NThread*>(arg);
   pthread_cleanup_push(CleanupThunk, t);   // (push and pop are one lexical pair: all the work is in RunThread)
@@ -268,6 +307,22 @@ void* ThreadMain(void* arg) {
   pthread_cleanup_pop(1);   // (runs the handler too: Finish is a no-op by now, the runtime binding is released)
   return nullptr;
 }
+
+bool StartHostThread(NThread* t) {
+  pthread_attr_t attr;
+  pthread_attr_init(&attr);
+  pthread_attr_setstacksize(&attr, 16u << 20);   // the recompiled code keeps its frames on the host stack: as big as the runtime gives its guest threads
+  const int rc = pthread_create(&t->host, &attr, ThreadMain, t);
+  pthread_attr_destroy(&attr);
+  if (rc != 0) {
+    fprintf(stderr, "THREADS: pthread_create failed (%d)\n", rc);
+    return false;
+  }
+  pthread_detach(t->host);
+  return true;
+}
+[[noreturn]] void ExitCurrentThread() { pthread_exit(nullptr); }
+#endif
 
 }  // namespace
 
@@ -318,12 +373,7 @@ bool StartGuestHostThread(uint8_t* base, uint32_t caller_pcr, uint32_t stack_siz
     std::lock_guard<std::mutex> lock(g_s.mu);
     g_s.by_kthread[t->kthread] = t;
   }
-  pthread_attr_t attr;
-  pthread_attr_init(&attr);
-  pthread_attr_setstacksize(&attr, 16u << 20);
-  const int rc = pthread_create(&t->host, &attr, ThreadMain, t);
-  pthread_attr_destroy(&attr);
-  if (rc != 0) {
+  if (!StartHostThread(t)) {
     {
       std::lock_guard<std::mutex> lock(g_s.mu);
       g_s.by_kthread.erase(t->kthread);
@@ -333,7 +383,6 @@ bool StartGuestHostThread(uint8_t* base, uint32_t caller_pcr, uint32_t stack_siz
     delete t;
     return false;
   }
-  pthread_detach(t->host);
   ++g_s.created;
   return true;
 }
@@ -424,13 +473,7 @@ REX_EXTERN(__wrap___imp__ExCreateThread) {
     std::lock_guard<std::mutex> lock(g_s.mu);
     g_s.by_kthread[t->kthread] = t;
   }
-  pthread_attr_t attr;
-  pthread_attr_init(&attr);
-  pthread_attr_setstacksize(&attr, 16u << 20);   // the recompiled code keeps its frames on the host stack: as big as the runtime gives its guest threads
-  const int rc = pthread_create(&t->host, &attr, ThreadMain, t);
-  pthread_attr_destroy(&attr);
-  if (rc != 0) {
-    fprintf(stderr, "THREADS: pthread_create failed (%d)\n", rc);
+  if (!StartHostThread(t)) {
     {
       std::lock_guard<std::mutex> lock(g_s.mu);
       g_s.by_kthread.erase(t->kthread);
@@ -441,7 +484,6 @@ REX_EXTERN(__wrap___imp__ExCreateThread) {
     ctx.r3.u64 = kStatusNoMemory;
     return;
   }
-  pthread_detach(t->host);
   ++g_s.created;
   if (getenv("GH2_THREADS_TRACE"))
     fprintf(stderr, "THREADS +%u kthread %08X pcr %08X stack %08X..%08X handle %08X entry %08X (xapi %08X) ctx %08X flags %08X cpu %u by %08X\n", t->thread_id, t->kthread, t->pcr, t->blk.stack.limit,
@@ -455,7 +497,7 @@ REX_EXTERN(__wrap___imp__ExTerminateThread) {
   NThread* t = Active() ? Current(base, ctx) : nullptr;
   if (!t) { __real___imp__ExTerminateThread(ctx, base); return; }
   Finish(t, ctx.r3.u32);
-  pthread_exit(nullptr);
+  ExitCurrentThread();
 }
 
 // NtSuspendThread(handle, previous_count*)

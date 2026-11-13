@@ -7,12 +7,22 @@ import threading
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))   # (python -I, as the Windows stub starts it, leaves the script's own folder off sys.path)
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scripts"))
-from gh2install import __version__, deps, shortcut, updater  # noqa: E402
+from gh2install import __version__, updater  # noqa: E402
 from gh2install.pipeline import InstallError, Installer, clean_env, default_prefix, find_game  # noqa: E402
 
+import hostos  # noqa: E402
 import native_dialog  # noqa: E402
 from palette import BG, DEEP_RED, DIM, GOLD, ORANGE, PANEL, RED, TEXT, TROUGH  # noqa: E402
+
+if hostos.IS_WIN:
+    from gh2install import deps_win as deps  # noqa: E402
+    from gh2install import win  # noqa: E402
+    Installer = win.WinInstaller  # noqa: F811 - the Windows installer has the same interface
+    shortcut = None
+else:
+    from gh2install import deps, shortcut  # noqa: E402
 
 
 class Launcher(tk.Tk):
@@ -20,8 +30,14 @@ class Launcher(tk.Tk):
         super().__init__()
         self.title("reGH2")
         self.configure(bg=BG)
-        self.geometry("760x680")
-        self.minsize(640, 560)
+        self.scale = max(1.0, self.winfo_fpixels("1i") / 96.0)   # 1.0 at 100 % display scaling (Windows: DPI aware, so this is the real scale)
+        self.geometry("%dx%d" % (self.px(760), self.px(790 if hostos.IS_WIN else 680)))
+        self.minsize(self.px(640), self.px(640 if hostos.IS_WIN else 560))
+        if hostos.icon_path():
+            try:
+                self.iconbitmap(default=hostos.icon_path())
+            except tk.TclError:
+                pass
         self.installer_args = installer_args
         self.source = tk.StringVar()
         self.busy = False
@@ -32,21 +48,27 @@ class Launcher(tk.Tk):
         if updater.check_enabled():
             self.after(400, self.check_updates)
 
+    def px(self, n):
+        """A size in pixels at this display's scaling."""
+        return int(n * getattr(self, "scale", 1.0))
+
     # ---- look ---------------------------------------------------------------------------------------------------
     def _style(self):
         s = ttk.Style(self)
         s.theme_use("clam")
         s.configure("TFrame", background=BG)
         s.configure("Panel.TFrame", background=PANEL)
-        s.configure("TLabel", background=BG, foreground=TEXT, font=("Sans", 10))
+        s.configure("TLabel", background=BG, foreground=TEXT, font=(hostos.UI_FONT, 10))
         s.configure("Panel.TLabel", background=PANEL, foreground=TEXT)
         s.configure("Dim.TLabel", background=PANEL, foreground=DIM)
-        s.configure("Title.TLabel", background=RED, foreground=TEXT, font=("Sans", 16, "bold"), padding=(16, 10))
-        s.configure("Head.TLabel", background=PANEL, foreground=GOLD, font=("Sans", 11, "bold"))
-        s.configure("TButton", background=DEEP_RED, foreground=TEXT, borderwidth=0, padding=(14, 8), font=("Sans", 10))
+        s.configure("Title.TLabel", background=RED, foreground=TEXT, font=(hostos.UI_FONT, 16, "bold"), padding=(16, 10))
+        s.configure("Head.TLabel", background=PANEL, foreground=GOLD, font=(hostos.UI_FONT, 11, "bold"))
+        s.configure("TButton", background=DEEP_RED, foreground=TEXT, borderwidth=0, padding=(14, 8), font=(hostos.UI_FONT, 10))
         s.map("TButton", background=[("active", ORANGE), ("disabled", TROUGH)], foreground=[("disabled", DIM)])
-        s.configure("Play.TButton", background=RED, font=("Sans", 16, "bold"), padding=(30, 14))
+        s.configure("Play.TButton", background=RED, font=(hostos.UI_FONT, 16, "bold"), padding=(30, 14))
         s.map("Play.TButton", background=[("active", ORANGE), ("disabled", TROUGH)])
+        s.configure("TCheckbutton", background=BG, foreground=TEXT, font=(hostos.UI_FONT, 10))
+        s.map("TCheckbutton", background=[("active", BG)], foreground=[("active", ORANGE)], indicatorcolor=[("selected", ORANGE), ("!selected", TROUGH)])
         s.configure("Horizontal.TProgressbar", troughcolor=TROUGH, background=ORANGE, bordercolor=PANEL, lightcolor=ORANGE,
                     darkcolor=ORANGE)
 
@@ -67,7 +89,7 @@ class Launcher(tk.Tk):
         self.state_panel.pack(fill="x")
         self.state_head = ttk.Label(self.state_panel, text="", style="Head.TLabel")
         self.state_head.pack(anchor="w")
-        self.state_info = ttk.Label(self.state_panel, text="", style="Dim.TLabel", wraplength=680, justify="left")
+        self.state_info = ttk.Label(self.state_panel, text="", style="Dim.TLabel", wraplength=self.px(680), justify="left")
         self.state_info.pack(anchor="w", pady=(4, 10))
         row = ttk.Frame(self.state_panel, style="Panel.TFrame")
         row.pack(fill="x")
@@ -88,7 +110,7 @@ class Launcher(tk.Tk):
         self.install_panel = ttk.Frame(body, style="Panel.TFrame", padding=16)
         self.install_panel.pack(fill="x", pady=(14, 0))
         ttk.Label(self.install_panel, text="INSTALL FROM YOUR COPY OF THE GAME", style="Head.TLabel").pack(anchor="w")
-        ttk.Label(self.install_panel, style="Dim.TLabel", wraplength=680, justify="left",
+        ttk.Label(self.install_panel, style="Dim.TLabel", wraplength=self.px(680), justify="left",
                   text="Select the folder that holds your Guitar Hero II (Xbox 360): the disc image (.iso), the extracted game, or the "
                        "folder with default.xex. Any folder works; the game is looked for inside it. It is rebuilt from your "
                        "files on this computer; nothing of it is downloaded or bundled.").pack(
@@ -98,10 +120,11 @@ class Launcher(tk.Tk):
         self.pick_btn = ttk.Button(pick, text="Select folder...", command=self.pick_game)
         self.pick_btn.pack(side="left")
         self.found_text = tk.StringVar(value="No folder selected yet.")
-        ttk.Label(self.install_panel, textvariable=self.found_text, style="Dim.TLabel", wraplength=680).pack(anchor="w", pady=(8, 8))
-        self.desktop_icon = tk.BooleanVar(value=True)
-        ttk.Checkbutton(self.install_panel, text="Create a desktop icon (an app menu entry is always created)",
-                        variable=self.desktop_icon).pack(anchor="w", pady=(0, 8))
+        ttk.Label(self.install_panel, textvariable=self.found_text, style="Dim.TLabel", wraplength=self.px(680)).pack(anchor="w", pady=(8, 8))
+        self.desktop_icon = tk.BooleanVar(value=not hostos.IS_WIN)   # (Windows: the Start menu entry and the desktop icon are made by Setup.exe)
+        if not hostos.IS_WIN:
+            ttk.Checkbutton(self.install_panel, text="Create a desktop icon (an app menu entry is always created)",
+                            variable=self.desktop_icon).pack(anchor="w", pady=(0, 8))
         self.install_btn = ttk.Button(self.install_panel, text="Install", command=self.install)
         self.install_btn.pack(anchor="w")
         self.bar = ttk.Progressbar(self.install_panel, maximum=100)
@@ -109,7 +132,7 @@ class Launcher(tk.Tk):
         self.bar_text = ttk.Label(self.install_panel, text="", style="Dim.TLabel")
         self.bar_text.pack(anchor="w")
 
-        self.log = tk.Text(body, height=8, bg="#120808", fg=DIM, insertbackground=TEXT, relief="flat", font=("Monospace", 9),
+        self.log = tk.Text(body, height=8, bg="#120808", fg=DIM, insertbackground=TEXT, relief="flat", font=(hostos.MONO_FONT, 9),
                            state="disabled")
         self.log.pack(fill="both", expand=True, pady=(14, 0))
         self.check_var = tk.BooleanVar(value=updater.check_enabled())
@@ -144,6 +167,8 @@ class Launcher(tk.Tk):
         def do():
             self.log.config(state="normal")
             self.log.insert("end", text + "\n")
+            if int(self.log.index("end-1c").split(".")[0]) > 3000:   # the build prints thousands of lines: keep the last ones
+                self.log.delete("1.0", "500.0")
             self.log.see("end")
             self.log.config(state="disabled")
         self.after(0, do)
@@ -264,7 +289,7 @@ class Launcher(tk.Tk):
         if self.busy or not self.update_info:
             return
         info = self.update_info
-        if not updater.target_appimage():
+        if not hostos.IS_WIN and not updater.target_appimage():
             messagebox.showinfo("Update", "This copy is not running from an AppImage, so it cannot replace itself.\n\n"
                                 "Download the new version here:\n" + info["page"])
             return
@@ -283,7 +308,10 @@ class Launcher(tk.Tk):
             self.set_progress(1, "Updated")
 
             def done():
-                if replaced:
+                if hostos.IS_WIN:   # Setup.exe is running: it replaces the program files and starts the launcher again
+                    messagebox.showinfo("Updating", "reGH2 %s is being installed. This window closes and the launcher opens again when it is done.\n"
+                                        "The game you built and your saves stay as they are; if this version has changes in the game, press Update game." % info["version"])
+                elif replaced:
                     messagebox.showinfo("Updated", "reGH2 %s is installed. The launcher will restart now." % info["version"])
                     subprocess.Popen([path, *self.restart_args()], env=clean_env(), start_new_session=True)
                 else:
@@ -317,6 +345,10 @@ class Launcher(tk.Tk):
         app = os.path.join(inst.prefix, "app")
         try:
             inst.ensure_runtime()  # the game must not depend on this AppImage staying mounted
+            if hostos.IS_WIN:
+                inst.start_game()
+                self.after(1500, self.destroy)
+                return
         except InstallError as e:
             messagebox.showerror("Cannot start", str(e))
             return
@@ -325,6 +357,8 @@ class Launcher(tk.Tk):
         self.after(1500, self.destroy)
 
     def open_folder(self, folder):
+        if hostos.open_path(folder):
+            return
         # programs outside the AppImage must not see its bundled libraries (the file manager would not even start)
         for opener in (["xdg-open"], ["gio", "open"], ["dolphin"], ["nautilus"], ["thunar"]):
             try:
@@ -426,13 +460,22 @@ def main():
             args["toolchain_file"] = a[17:]
         elif a.startswith("--prefix="):
             args["prefix"] = a[9:]
+    hostos.enable_dpi_awareness()
+    if hostos.IS_WIN and "--play" in sys.argv[1:]:   # the "Play" shortcut: straight into the game when it is installed and a graphics driver is there
+        inst = Installer(args.get("prefix"))
+        if inst.status() and not deps.check():
+            try:
+                inst.start_game()
+                return
+            except InstallError:
+                pass
     try:  # keep the shortcuts valid if the AppImage was moved; add the menu entry to installs made before it existed
         inst = Installer(args.get("prefix"))
         icon = os.path.join(os.environ.get("APPDIR", ""), "gh2-recomp.png")
-        if inst.status() and not os.path.exists(shortcut.menu_entry_path()) and os.environ.get("APPIMAGE"):
+        if shortcut and inst.status() and not os.path.exists(shortcut.menu_entry_path()) and os.environ.get("APPIMAGE"):
             shortcut.create(shortcut.keep_copy(os.environ["APPIMAGE"], inst.prefix, lambda *_: None), icon,
                             desktop_icon=False, log=lambda *_: None)
-        if inst.status():
+        if shortcut and inst.status():
             shortcut.refresh(os.environ.get("APPIMAGE"), icon, inst.prefix)
     except OSError:
         pass

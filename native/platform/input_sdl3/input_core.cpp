@@ -1,8 +1,7 @@
 #include "input_core.h"
 
 #include <SDL3/SDL.h>
-#include <pthread.h>
-#include <time.h>
+#include <gh2os/os.h>
 
 #include <algorithm>
 #include <chrono>
@@ -333,7 +332,7 @@ struct InputCore::Impl {
   }
 
   void Run() {
-    pthread_setname_np(pthread_self(), "gh2-input");
+    gh2os::SetCurrentThreadName("gh2-input");
     const int hz = std::clamp(opt.poll_hz, 10, 8000);
     const auto period = std::chrono::nanoseconds(1'000'000'000LL / hz);
     // udev / HIDAPI enumeration needs a few pumps before the first scan sees everything that is plugged in
@@ -366,9 +365,7 @@ struct InputCore::Impl {
       uint64_t prev = max_tick_ns.load(std::memory_order_relaxed);
       while (dur > prev && !max_tick_ns.compare_exchange_weak(prev, dur, std::memory_order_relaxed)) {}
       if ((n & 255) == 0) {
-        timespec ts;
-        if (clock_gettime(CLOCK_THREAD_CPUTIME_ID, &ts) == 0)
-          cpu_ns.store(static_cast<uint64_t>(ts.tv_sec) * 1'000'000'000ull + static_cast<uint64_t>(ts.tv_nsec), std::memory_order_relaxed);
+        if (const uint64_t cpu = gh2os::CurrentThreadCpuNs()) cpu_ns.store(cpu, std::memory_order_relaxed);
       }
       const auto now = std::chrono::steady_clock::now();
       if (now > next + period) {  // a whole tick late: do not try to catch up

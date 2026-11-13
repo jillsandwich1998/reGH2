@@ -1,8 +1,8 @@
 #include "gh2k/ark.h"
 
-#include <fcntl.h>
-#include <unistd.h>
 #include <zlib.h>
+
+#include "fileio.h"
 
 #include <algorithm>
 #include <cctype>
@@ -182,18 +182,18 @@ fs::path ArkArchive::PartPath(uint32_t part) const {
 }
 
 bool ArkArchive::ReadStored(const ArkEntry& e, uint64_t offset, void* buffer, uint32_t length, std::string* error) const {
-  const int fd = ::open(PartPath(e.part).c_str(), O_RDONLY | O_CLOEXEC);
-  if (fd < 0) {
+  const fio::Handle fd = fio::OpenRead(PartPath(e.part));
+  if (!fio::Valid(fd)) {
     if (error) *error = "cannot open the part";
     return false;
   }
   uint32_t done = 0;
   while (done < length) {
-    const ssize_t n = ::pread(fd, static_cast<uint8_t*>(buffer) + done, length - done, static_cast<off_t>(e.part_offset + offset + done));
+    const int64_t n = fio::ReadAt(fd, static_cast<uint8_t*>(buffer) + done, length - done, static_cast<uint64_t>(e.part_offset) + offset + done);
     if (n <= 0) break;
     done += static_cast<uint32_t>(n);
   }
-  ::close(fd);
+  fio::Close(fd);
   if (done != length) {
     if (error) *error = "short read";
     return false;

@@ -18,8 +18,8 @@
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
-#include <dirent.h>
-#include <unistd.h>
+#include <gh2k/host_addr.h>
+#include <gh2os/os.h>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -70,12 +70,12 @@ bool Active() {
 
 uint32_t Be32(const uint8_t* b, uint32_t a) {
   uint32_t v;
-  std::memcpy(&v, b + a, 4);
+  std::memcpy(&v, gh2k::HostAddr(b, a), 4);
   return __builtin_bswap32(v);
 }
 void PutBe32(uint8_t* b, uint32_t a, uint32_t v) {
   v = __builtin_bswap32(v);
-  std::memcpy(b + a, &v, 4);
+  std::memcpy(gh2k::HostAddr(b, a), &v, 4);
 }
 
 // The graphics interrupt callback: guest code on the calling native thread.
@@ -87,7 +87,7 @@ void DispatchInterrupt(uint32_t source, uint32_t cpu) {
   uint8_t* base = tl_base;
   PPCFunc* fn = gh2abi::ResolveIndirectFunction(callback);
   if (!fn) return;
-  std::unique_lock<std::recursive_mutex> lock(gh2abi::global_critical_region::mutex());   // held for the whole callback, as the runtime does
+  std::unique_lock<gh2abi::GlobalLock> lock(gh2abi::global_critical_region::mutex());   // held for the whole callback, as the runtime does
   const uint32_t pcr = ctx.r13.u32;
   const uint32_t kthread = Be32(base, pcr + 0x100);
   base[kthread + 0xBF] = static_cast<uint8_t>(cpu);   // the thread now "runs on" this hardware thread
@@ -166,25 +166,9 @@ void StartThreads(PPCContext& ctx, uint8_t* base) {
               (unsigned long long)s.type3_by_opcode[0x27].load(), (unsigned long long)s.type3_by_opcode[0x2B].load(), (unsigned long long)s.type3_by_opcode[0x2F].load(), (unsigned long long)s.type3_by_opcode[0x2D].load(),
               (unsigned long long)s.type3_by_opcode[0x22].load(), (unsigned long long)s.type3_by_opcode[0x36].load(), (unsigned long long)s.type3_by_opcode[0x3F].load());
       {   // the process's own memory, for the long sessions (a slow climb that never levels off is a leak): resident set, virtual size, threads, open files
-        unsigned long pages_total = 0, pages_resident = 0;
-        if (FILE* f = fopen("/proc/self/statm", "r")) {
-          if (fscanf(f, "%lu %lu", &pages_total, &pages_resident) != 2) pages_total = pages_resident = 0;
-          fclose(f);
-        }
-        int threads = 0;
-        if (FILE* f = fopen("/proc/self/status", "r")) {
-          char line[256];
-          while (fgets(line, sizeof line, f))
-            if (sscanf(line, "Threads: %d", &threads) == 1) break;
-          fclose(f);
-        }
-        int fds = 0;
-        if (DIR* d = opendir("/proc/self/fd")) {
-          while (readdir(d)) ++fds;
-          closedir(d);
-        }
-        const double page_mb = sysconf(_SC_PAGESIZE) / 1048576.0;
-        fprintf(stderr, "PROC T+%ds resident %.0f MB, virtual %.0f MB, %d threads, %d open files\n", n * 10, pages_resident * page_mb, pages_total * page_mb, threads, fds > 2 ? fds - 2 : 0);
+        gh2os::ProcessStats ps;
+        if (gh2os::QueryProcessStats(&ps))
+          fprintf(stderr, "PROC T+%ds resident %.0f MB, virtual %.0f MB, %d threads, %d open files\n", n * 10, ps.resident_mb, ps.virtual_mb, ps.threads, ps.open_files);
       }
       const std::string render = gh2rt::gpu::RendererStatsLine();
       if (!render.empty()) fprintf(stderr, "GPU T+%ds %s\n", n * 10, render.c_str());

@@ -5,6 +5,13 @@
 // GH2_PROFILE=1 samples continuously (every ~2 ms); GH2_PROFILE_THREAD=<name prefix> samples that thread instead of the main one;
 // GH2_STALL_ALL=1 samples every thread during a stall; GH2_STALL_TRAP=MIN:MAX raises SIGTRAP once at a >40 ms hitch inside that
 // window (seconds since start) so a debugger can stop the process there.
+#ifdef _WIN32
+#include "hooks_internal.h"
+
+namespace gh2rt::hooks::detail {
+void Heartbeat() {}   // the sampling profiler uses POSIX signals and /proc: not built on Windows (use a native profiler such as ETW/Superluminal)
+}  // namespace gh2rt::hooks::detail
+#else
 #include <dirent.h>
 #include <execinfo.h>
 #include <link.h>
@@ -141,3 +148,4 @@ void Heartbeat() {
 }
 
 }  // namespace gh2rt::hooks::detail
+#endif  // _WIN32

@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <gh2os/os.h>
 #include <rex/cvar.h>
 #include <rex/rex_app.h>
 #include <rex/system/gpu_plugin.h>
@@ -12,6 +13,9 @@
 #include "shader_bootstrap.h"
 #include "native_window.h"
 #include <gh2rt/hooks_api.h>
+#ifdef GH2_GAME_MODULE
+#include <gh2module/host.h>
+#endif
 
 #include <chrono>
 #include <cstdio>
@@ -47,8 +51,13 @@ class Gh2App : public rex::ReXApp {
 
   static std::unique_ptr<rex::ui::WindowedApp> Create(
       rex::ui::WindowedAppContext& ctx) {
-    return std::unique_ptr<Gh2App>(new Gh2App(ctx, "gh2",
-        PPCImageConfig));
+#ifdef GH2_GAME_MODULE
+    // the game code is the module gh2game.dll: load it and complete the handshake first (on failure it tells the player and exits)
+    const auto& image = *static_cast<const rex::PPCImageInfo*>(gh2module::OpenGameModule());
+#else
+    const auto& image = PPCImageConfig;
+#endif
+    return std::unique_ptr<Gh2App>(new Gh2App(ctx, "gh2", image));
   }
 
   // Load the GPU plugin here (as ReXApp would right after) to keep a pointer to its presenter for the graphics menu.
@@ -59,8 +68,7 @@ class Gh2App : public rex::ReXApp {
     // The game's logic advances once per rendered frame (it ran faster in light scenes and slower in heavy ones with
     // vsync off), so an unlocked frame rate is not supported: ignore a stale `vsync = false` from a config file.
     // A command line `--vsync=...` is still honoured for experiments.
-    std::ifstream cmd("/proc/self/cmdline", std::ios::binary);
-    const std::string args((std::istreambuf_iterator<char>(cmd)), std::istreambuf_iterator<char>());
+    const std::string args = gh2os::CommandLine();
     if (args.find("--vsync") == std::string::npos) rex::cvar::SetFlagByName("vsync", "true");
     if (Gh2NativeGpuSelected()) {   // windowed mode opens at the internal resolution (an explicit --window_width/--window_height wins; fullscreen is the monitor's and the picture is fitted to it)
       const uint32_t h = Gh2RenderHeight();

@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+**New**
+* Windows 11 source build (clang + lld-link, Vulkan): `scripts/windows/`, `native/platform/os` (operating-system services behind one API), a Win32 window surface, Windows guest memory (placeholders and a pagefile-backed section) and file access. It reaches the title screen at 60 fps. See *Building on Windows* in the README.
+* Windows installer and launcher: `reGH2-Setup-<version>.exe` (Inno Setup, per-user, no administrator rights) installs the launcher, the game's host prebuilt (`host\`: `gh2.exe` and the DLLs it loads, made by `gh2win.py make-host`) and the tools that build the rest (llvm-mingw, Ninja, Python with Tk, the SDK's code generator, the shader tools); the launcher translates the player's own `default.xex` and compiles only the game module `gh2game.dll` (`scripts/gh2install/win.py`), with nothing downloaded and nothing from Microsoft to install; it checks for a Vulkan driver; the install shows the compile live (step, file, elapsed time, estimate, the compiler's output); and it updates itself from the release's `Setup.exe` (checked against `SHA256SUMS.txt`). Built by `packaging/windows/make-installer.ps1`. A development checkout without a prebuilt host still builds everything (`gh2win.py build --full`, CMake + Visual Studio's C++ tools).
+* Windows game module: with `GH2_GAME_MODULE` (on by default on Windows) the generated game code is built as `gh2game.dll` with llvm-mingw (clang, lld, libc++ and mingw-w64, all redistributable) and loaded by `gh2.exe` at start. Only plain C crosses between the two: the runtime services, the 179 kernel imports, the 916 game functions the hooks replace and their original code, checked by a handshake (contract version, `PPCContext` layout, the hash of both lists). See `native/rt/module`, `native/tools/gen_module_stubs.py` and `native/tools/build_game_module.py`. Linux is unchanged (the option is off there).
+* SDK patches 0012 (an exported setter for the runtime's current thread) and 0013 (one shared SDL3 library) for the Windows build; they apply on Linux too.
+* `.gitattributes`: patches and shell scripts stay LF in Windows checkouts.
+
+**Fixed**
+* Stutter the first time a scene is shown (the first song in a venue: frames of up to 0.8 s while the driver compiled hundreds of new pipelines one by one inside the frame). New pipelines are now compiled by a pool of threads, side by side; a frame waits for them 8 ms at most and draws the objects whose pipeline is not ready yet from the next frames on (`native/gfx/render/pipelines.cpp`; `GH2_PIPELINE_ASYNC=0` restores the old behaviour, `GH2_PIPELINE_WAIT_MS` sets the wait). The same renderer runs on Linux and Windows.
+* No sound device (none plugged in, or only a monitor's that went to sleep): the game crashed a second after starting, because the audio output failed to open and the game does not survive a failed audio driver. The sink now consumes the frames with its software clock (silent, at the right speed) and looks for a device every 2 s: plugging one in (or waking the monitor) brings the sound in without a restart. A device lost while playing was already handled by SDL3 (the stream keeps time silently and follows the new default device). `GH2_TEST_AUDIO_LATE=N` pretends there is no device for N seconds (`native/platform/audio_sdl3/audio_sink.cpp`).
+
 ## 0.2.1 (pre-release)
 
 **Fixed**

@@ -3,9 +3,19 @@
 //   gh2_mem_selftest --replay FILE         also replays the allocations a real run made (GH2_MEM_TRACE=FILE): every address the runtime returned must be
 //                                          acceptable to the native heaps, and the native top-down policy is compared with the addresses it chose
 // Exit status 0 = everything passed.
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#else
 #include <signal.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#endif
 
 #include <chrono>
 #include <cstdio>
@@ -27,7 +37,21 @@ void Check(bool ok, const std::string& what, const std::string& detail = "") {
   if (!ok) ++g_failures;
 }
 
-// does touching the guest address kill the process? (a child process, so that the test survives)
+// does touching the guest address fault? (POSIX: in a child process so that the test survives; Windows: a structured exception handler)
+#ifdef _WIN32
+// (the access is made in a function that is not inlined: LLVM registers an SEH region only around calls, a bare load inside __try would be left without its handler)
+__attribute__((noinline)) void Touch(volatile uint8_t* p, bool write) {
+  if (write) *p = 1; else (void)*p;
+}
+bool Faults(uint8_t* host, bool write) {
+  __try {
+    Touch(host, write);
+  } __except (GetExceptionCode() == EXCEPTION_ACCESS_VIOLATION ? EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH) {
+    return true;
+  }
+  return false;
+}
+#else
 bool Faults(uint8_t* host, bool write) {
   const pid_t pid = fork();
   if (pid == 0) {
@@ -40,6 +64,7 @@ bool Faults(uint8_t* host, bool write) {
   waitpid(pid, &st, 0);
   return WIFSIGNALED(st) && WTERMSIG(st) == SIGSEGV;
 }
+#endif
 
 void Basics(Memory& m) {
   uint8_t* b = m.base();
@@ -48,8 +73,8 @@ void Basics(Memory& m) {
   Check(m.PhysicalAlloc(0x20000, 0x10000, 0x10000, kReadWrite, &a64) && a64 >= 0xA0000000u && a64 < 0xC0000000u, "a 64 KB-page physical allocation lives in the 0xA0000000 window", std::to_string(a64));
   const uint32_t off = Memory::PhysicalOffset(a64);
   std::memset(b + a64, 0x5A, 16);
-  Check(b[0xC0000000u + off] == 0x5A && b[0xE0000000u + off - 0x1000] == 0x5A && m.arena().physical()[off] == 0x5A, "the three windows and the physical view are the same bytes");
-  Check(m.PhysicalAlloc(0x1000, 0x20, 0x1000, kReadWrite, &a4k) && a4k >= 0xE0000000u && a4k < 0xFFD00000u && (std::memset(b + a4k, 0x77, 4), m.arena().physical()[Memory::PhysicalOffset(a4k)] == 0x77), "a 4 KB-page allocation lives in 0xE0000000..0xFFCFFFFF");
+  Check(b[0xC0000000u + off] == 0x5A && *gh2k::HostAddr(b, 0xE0000000u + off - kEWindowSkew) == 0x5A && m.arena().physical()[off] == 0x5A, "the three windows and the physical view are the same bytes");
+  Check(m.PhysicalAlloc(0x1000, 0x20, 0x1000, kReadWrite, &a4k) && a4k >= 0xE0000000u && a4k < 0xFFD00000u + kEWindowSkew && (std::memset(gh2k::HostAddr(b, a4k), 0x77, 4), m.arena().physical()[Memory::PhysicalOffset(a4k)] == 0x77), "a 4 KB-page allocation lives in 0xE0000000..0xFFCFFFFF");
   Check(m.PhysicalAllocationSize(a4k) == 0x1000 && m.PhysicalAllocationSize(a64) == 0x20000 && m.PhysicalAllocationSize(a4k + 4) == 0, "MmQueryAllocationSize: size by base address");
   Check(Memory::PhysicalOffset(a4k) + 0x1000 <= off || Memory::PhysicalOffset(a4k) >= off + 0x20000, "different allocations, different physical bytes");
   Check(m.PhysicalAlloc(0x1000000, 0, 0x1000000, kReadWrite, &a16m) && a16m >= 0xC0000000u && (a16m & 0xFFFFFF) == 0, "a 16 MB-page allocation is 16 MB aligned in 0xC0000000..");
@@ -216,6 +241,7 @@ void Replay(Memory& m, const char* path) {
 }  // namespace
 
 int main(int argc, char** argv) {
+  std::setvbuf(stdout, nullptr, _IONBF, 0);   // (a crash must not swallow the lines before it)
   std::string error;
   auto m = Memory::Create(&error);
   Check(m != nullptr, "the 4.5 GB reservation, the memfd and the windows are created", error);

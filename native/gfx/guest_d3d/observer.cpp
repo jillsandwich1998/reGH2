@@ -1,3 +1,4 @@
+#include "gh2k/host_addr.h"
 #include "observer.h"
 
 #include <algorithm>
@@ -23,7 +24,7 @@ namespace {
 
 inline uint32_t Be32(const uint8_t* base, uint32_t guest_address) {
   uint32_t v;
-  std::memcpy(&v, base + guest_address, sizeof(v));
+  std::memcpy(&v, gh2k::HostAddr(base, guest_address), sizeof(v));
   return __builtin_bswap32(v);
 }
 
@@ -88,7 +89,7 @@ class ShaderObserverImpl final : public ShaderObserver {
 
   void OnShaderCreated(const uint8_t* base, Stage stage, uint32_t container, uint32_t object) override {
     if (!object || !container) return;
-    const uint8_t* c = base + container;
+    const uint8_t* c = gh2k::HostAddr(base, container);
     const uint32_t flags = Be32(base, container + container::kFlags);
     const uint32_t virtual_size = Be32(base, container + container::kVirtualSize);
     const uint32_t physical_size = Be32(base, container + container::kPhysicalSize);
@@ -288,7 +289,7 @@ class ShaderObserverImpl final : public ShaderObserver {
       fprintf(stderr, "%s\n", gfx_.SummaryLine(t).c_str());
     }
     if (report_.empty()) return;
-    if (FILE* f = fopen(report_.c_str(), "w")) {
+    if (FILE* f = fopen(report_.string().c_str(), "w")) {
       fprintf(f, "{\n \"seconds\": %.1f,\n \"commits\": %llu,\n \"bad_containers\": %llu,\n \"stage_mismatch\": %llu,\n \"unregistered_objects\": %zu,\n \"unregistered_draws\": %llu,\n",
               t, static_cast<unsigned long long>(commits_), static_cast<unsigned long long>(bad_containers_), static_cast<unsigned long long>(stage_mismatch_),
               unregistered_.size(), static_cast<unsigned long long>(unregistered_draws_));
@@ -344,7 +345,7 @@ std::unique_ptr<ShaderObserver> MakeShaderObserver(const std::filesystem::path& 
   std::string error;
   auto cache = ShaderCache::Open(cache_dir, &error);
   if (!cache) {
-    fprintf(stderr, "D3DOBS cannot open the shader cache %s: %s\n", cache_dir.c_str(), error.c_str());
+    fprintf(stderr, "D3DOBS cannot open the shader cache %s: %s\n", cache_dir.string().c_str(), error.c_str());
     return nullptr;
   }
   return std::make_unique<ShaderObserverImpl>(std::move(cache), report_json);

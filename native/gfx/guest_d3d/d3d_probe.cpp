@@ -1,7 +1,18 @@
+#include "gh2k/host_addr.h"
 #include <gh2gfx/d3d_probe.h>
 
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#else
 #include <sys/uio.h>
 #include <unistd.h>
+#endif
 
 #include <algorithm>
 #include <atomic>
@@ -118,9 +129,14 @@ Recorder* g_rec = nullptr;
 // Reads guest memory without risking a fault (the guest's address space is only partly committed).
 bool SafeRead(const uint8_t* base, uint32_t addr, void* out, size_t n) {
   if (addr < 0x10000 || addr >= 0xFFFF0000u) return false;
+#ifdef _WIN32
+  SIZE_T got = 0;   // fails (instead of faulting) on memory that is not committed
+  return ReadProcessMemory(GetCurrentProcess(), gh2k::HostAddr(base, addr), out, n, &got) && got == n;
+#else
   iovec local{out, n};
-  iovec remote{const_cast<uint8_t*>(base) + addr, n};
+  iovec remote{const_cast<uint8_t*>(gh2k::HostAddr(base, addr)), n};
   return process_vm_readv(getpid(), &local, 1, &remote, 1, 0) == static_cast<ssize_t>(n);
+#endif
 }
 bool SafeReadBE32(const uint8_t* base, uint32_t addr, uint32_t* out) {
   if ((addr & 3) != 0) return false;

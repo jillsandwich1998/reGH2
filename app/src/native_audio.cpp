@@ -56,6 +56,8 @@ class NativeAudioDriver final : public rex::audio::AudioDriver {
     options.on_frame_consumed = [](void* self) { static_cast<NativeAudioDriver*>(self)->semaphore_->Release(1, nullptr); };
     options.on_frame_consumed_user = this;
     options.log = [](const char* line) { fprintf(stderr, "AUDIO %s\n", line); };
+    options.clock_until_device = true;   // no output device: a failed driver would bring the game down; silent until a device can be opened
+    if (const char* e = getenv("GH2_TEST_AUDIO_LATE"); e && *e) options.pretend_no_device_ms = uint32_t(atoi(e)) * 1000u;
     if (!sink_.Open(options)) return false;
     sink_.Start();
     g_driver.store(this);

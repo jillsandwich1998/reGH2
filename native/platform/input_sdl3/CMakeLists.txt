@@ -17,7 +17,7 @@ endif()
 
 add_library(gh2plat_input STATIC guitar_classifier.cpp input_core.cpp)
 target_include_directories(gh2plat_input PUBLIC "${CMAKE_CURRENT_LIST_DIR}")
-target_link_libraries(gh2plat_input PUBLIC gh2plat_sdl3)
+target_link_libraries(gh2plat_input PUBLIC gh2plat_sdl3 gh2os)
 target_compile_options(gh2plat_input PRIVATE -Wall -Wextra)
 
 add_executable(gh2_sdl_probe sdl_probe.cpp)

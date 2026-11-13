@@ -2,6 +2,7 @@
 // the registered observer (gh2gfx/guest_d3d.h). With no observer registered a hook costs one atomic load.
 //
 // Guest side (shim headers only): no SDK header, no `rex::`.
+#include "gh2k/host_addr.h"
 #include "gh2_pch.h"  // PPCContext, REX_EXTERN
 
 #include <gh2gfx/d3d_probe.h>
@@ -21,7 +22,7 @@ namespace {
 
 inline uint32_t LoadBE32(const uint8_t* base, uint32_t guest_address) {
   uint32_t v;
-  __builtin_memcpy(&v, base + guest_address, sizeof(v));
+  __builtin_memcpy(&v, gh2k::HostAddr(base, guest_address), sizeof(v));
   return __builtin_bswap32(v);
 }
 

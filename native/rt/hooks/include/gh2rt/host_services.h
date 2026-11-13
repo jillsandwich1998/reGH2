@@ -33,9 +33,9 @@ struct PadCaps {
 };
 constexpr uint32_t kPadNotConnected = 0x48F;   // ERROR_DEVICE_NOT_CONNECTED
 
-// The application window the native renderer presents to: the platform surface handles (Wayland wl_display/wl_surface, or Xlib Display/Window) and the live size in pixels.
+// The application window the native renderer presents to: the platform surface handles (Wayland wl_display/wl_surface, Xlib Display/Window, or Win32 HINSTANCE/HWND) and the live size in pixels.
 struct NativeWindow {
-  enum class Kind : uint32_t { kNone, kWayland, kXlib } kind = Kind::kNone;
+  enum class Kind : uint32_t { kNone, kWayland, kXlib, kWin32 } kind = Kind::kNone;
   void* display = nullptr;
   uint64_t surface = 0;
   const std::atomic<uint32_t>* width = nullptr;    // updated by the application when the window is resized

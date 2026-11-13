@@ -13,7 +13,7 @@ endif()
 
 add_library(gh2plat_audio STATIC audio_format.cpp audio_sink.cpp)
 target_include_directories(gh2plat_audio PUBLIC "${CMAKE_CURRENT_LIST_DIR}")
-target_link_libraries(gh2plat_audio PUBLIC gh2plat_sdl3)
+target_link_libraries(gh2plat_audio PUBLIC gh2plat_sdl3 gh2os)
 target_compile_options(gh2plat_audio PRIVATE -Wall -Wextra -ffp-contract=off)  # the stereo fold must round exactly like the SSE code it replaces
 
 add_executable(gh2_audio_selftest audio_selftest.cpp)

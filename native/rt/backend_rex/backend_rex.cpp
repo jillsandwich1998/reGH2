@@ -18,10 +18,7 @@
 #include <rex/system/xthread.h>
 #include <rex/thread/mutex.h>
 
-// the runtime's "current XThread" of a host thread (exported by librexruntime)
-namespace rex::system {
-extern thread_local XThread* current_xthread_tls_;
-}
+// the runtime's "current XThread" of a host thread is a thread_local of the runtime library; rex::system::SetCurrentXThreadForHost (sdk-patches/0012) sets it (a Windows DLL cannot export the variable)
 
 namespace gh2abi {
 
@@ -42,7 +39,7 @@ thread_local std::unique_ptr<rex::runtime::ThreadState> tl_thread_state;
 PPCContext* AdoptCurrentHostThread(uint32_t thread_id, uint32_t stack_top, uint32_t pcr) {
   if (!rex::system::XThread::IsInThread()) {
     std::lock_guard<std::mutex> lock(g_borrow_mutex);
-    if (g_borrowed) rex::system::current_xthread_tls_ = g_borrowed.get();
+    if (g_borrowed) rex::system::SetCurrentXThreadForHost(g_borrowed.get());
   }
   auto* kernel = rex::system::kernel_state();
   if (!kernel || !kernel->memory()) return nullptr;
@@ -54,25 +51,7 @@ PPCContext* AdoptCurrentHostThread(uint32_t thread_id, uint32_t stack_top, uint3
 void ReleaseCurrentHostThread() {
   rex::runtime::ThreadState::Bind(nullptr);
   tl_thread_state.reset();
-  rex::system::current_xthread_tls_ = nullptr;
-}
-
-PPCFunc* ResolveIndirectFunction(uint32_t guest_address) {
-  PPCFunc* func = rex::runtime::ResolveIndirectFunction(guest_address);
-  if (gh2rt::trace::Enabled()) {
-    static const uint16_t id = gh2rt::trace::IdOf(gh2rt::trace::kPseudoResolveIndirect);
-    gh2rt::trace::RecordPseudo(id, guest_address, 0, func ? 1u : 0u);
-  }
-  return func;
-}
-
-uint64_t Clock::QueryGuestTickCount() { return rex::chrono::Clock::QueryGuestTickCount(); }
-
-std::recursive_mutex& global_critical_region::mutex() { return rex::thread::global_critical_region::mutex(); }
-
-MMIOHandler* MMIOHandler::global_handler() {
-  static MMIOHandler handler;  // stateless: every call goes to the SDK's handler
-  return &handler;
+  rex::system::SetCurrentXThreadForHost(nullptr);
 }
 
 namespace {
@@ -85,7 +64,26 @@ void SetNativeMmio(const NativeMmio& handler) {
   g_native_mmio_set.store(true, std::memory_order_release);
 }
 
-bool MMIOHandler::CheckLoad(uint32_t guest_address, uint32_t* out_value) {
+}  // namespace gh2abi
+
+// ---- the C boundary of abi.h (the game code may be a module with another C++ ABI) ----
+extern "C" PPCFunc* gh2_resolve_indirect(uint32_t guest_address) {
+  PPCFunc* func = rex::runtime::ResolveIndirectFunction(guest_address);
+  if (gh2rt::trace::Enabled()) {
+    static const uint16_t id = gh2rt::trace::IdOf(gh2rt::trace::kPseudoResolveIndirect);
+    gh2rt::trace::RecordPseudo(id, guest_address, 0, func ? 1u : 0u);
+  }
+  return func;
+}
+
+extern "C" uint64_t gh2_guest_tick_count() { return rex::chrono::Clock::QueryGuestTickCount(); }
+
+extern "C" void gh2_global_lock() { rex::thread::global_critical_region::mutex().lock(); }
+extern "C" void gh2_global_unlock() { rex::thread::global_critical_region::mutex().unlock(); }
+extern "C" bool gh2_global_try_lock() { return rex::thread::global_critical_region::mutex().try_lock(); }
+
+extern "C" bool gh2_mmio_load(uint32_t guest_address, uint32_t* out_value) {
+  using namespace gh2abi;
   const bool handled = (g_native_mmio_set.load(std::memory_order_acquire) && g_native_mmio.load && g_native_mmio.load(g_native_mmio.user, guest_address, out_value)) ||
                        rex::runtime::MMIOHandler::global_handler()->CheckLoad(guest_address, out_value);
   if (gh2rt::trace::Enabled()) {
@@ -95,7 +93,8 @@ bool MMIOHandler::CheckLoad(uint32_t guest_address, uint32_t* out_value) {
   return handled;
 }
 
-bool MMIOHandler::CheckStore(uint32_t guest_address, uint32_t value) {
+extern "C" bool gh2_mmio_store(uint32_t guest_address, uint32_t value) {
+  using namespace gh2abi;
   const bool handled = (g_native_mmio_set.load(std::memory_order_acquire) && g_native_mmio.store && g_native_mmio.store(g_native_mmio.user, guest_address, value)) ||
                        rex::runtime::MMIOHandler::global_handler()->CheckStore(guest_address, value);
   if (gh2rt::trace::Enabled()) {
@@ -105,13 +104,12 @@ bool MMIOHandler::CheckStore(uint32_t guest_address, uint32_t value) {
   return handled;
 }
 
-void LogMessage(LogLevel level, std::string_view message) {
+extern "C" void gh2_log(int level, const char* text, size_t length) {
+  const std::string_view message(text, length);
   switch (level) {
-    case LogLevel::kDebug: REXCPU_DEBUG("{}", message); break;
-    case LogLevel::kInfo: REXCPU_INFO("{}", message); break;
-    case LogLevel::kWarn: REXCPU_WARN("{}", message); break;
-    case LogLevel::kError: REXCPU_ERROR("{}", message); break;
+    case 0: REXCPU_DEBUG("{}", message); break;
+    case 1: REXCPU_INFO("{}", message); break;
+    case 2: REXCPU_WARN("{}", message); break;
+    default: REXCPU_ERROR("{}", message); break;
   }
 }
-
-}  // namespace gh2abi

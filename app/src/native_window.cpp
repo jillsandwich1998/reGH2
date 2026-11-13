@@ -33,6 +33,13 @@ void Gh2NativeWindowOpened(rex::ui::Window* window) {
   }
   const SDL_PropertiesID props = SDL_GetWindowProperties(sdl);
   gh2rt::NativeWindow w;
+#if defined(_WIN32)
+  if (void* hwnd = SDL_GetPointerProperty(props, SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr)) {
+    w.kind = gh2rt::NativeWindow::Kind::kWin32;
+    w.display = SDL_GetPointerProperty(props, SDL_PROP_WINDOW_WIN32_INSTANCE_POINTER, nullptr);   // HINSTANCE
+    w.surface = reinterpret_cast<uint64_t>(hwnd);
+  } else
+#endif
   if (void* display = SDL_GetPointerProperty(props, SDL_PROP_WINDOW_WAYLAND_DISPLAY_POINTER, nullptr)) {
     w.kind = gh2rt::NativeWindow::Kind::kWayland;
     w.display = display;
@@ -42,7 +49,7 @@ void Gh2NativeWindowOpened(rex::ui::Window* window) {
     w.display = xdisplay;
     w.surface = static_cast<uint64_t>(SDL_GetNumberProperty(props, SDL_PROP_WINDOW_X11_WINDOW_NUMBER, 0));
   } else {
-    std::fprintf(stderr, "NATIVE WINDOW: the SDL window has neither a Wayland nor an X11 surface\n");
+    std::fprintf(stderr, "NATIVE WINDOW: the SDL window has no Win32, Wayland or X11 surface\n");
     return;
   }
   int pw = 0, ph = 0;
@@ -53,7 +60,8 @@ void Gh2NativeWindowOpened(rex::ui::Window* window) {
   w.height = &g_height;
   g_window = w;
   g_ready.store(true, std::memory_order_release);
-  std::fprintf(stderr, "NATIVE WINDOW: %s surface, %ux%u\n", w.kind == gh2rt::NativeWindow::Kind::kWayland ? "Wayland" : "X11", g_width.load(), g_height.load());
+  std::fprintf(stderr, "NATIVE WINDOW: %s surface, %ux%u\n", w.kind == gh2rt::NativeWindow::Kind::kWin32 ? "Win32" : w.kind == gh2rt::NativeWindow::Kind::kWayland ? "Wayland" : "X11", g_width.load(),
+               g_height.load());
 }
 
 bool Gh2GetNativeWindow(gh2rt::NativeWindow* out) {

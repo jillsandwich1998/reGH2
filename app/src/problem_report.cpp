@@ -2,8 +2,8 @@
 
 #include "native_audio.h"
 
+#include <gh2os/os.h>
 #include <rex/cvar.h>
-#include <sys/utsname.h>
 
 #include <algorithm>
 #include <cstdlib>
@@ -52,31 +52,6 @@ std::string Head(const std::vector<std::string>& lines, size_t n) {
   return s;
 }
 
-// First line of a "key: value" file such as /proc/cpuinfo that starts with `key`.
-std::string FirstValue(const std::string& text, const std::string& key) {
-  for (const auto& l : Lines(text))
-    if (l.rfind(key, 0) == 0) {
-      const size_t c = l.find(':');
-      return c == std::string::npos ? l : l.substr(c + 2);
-    }
-  return "?";
-}
-
-std::string OsRelease() {
-  for (const auto& l : Lines(ReadFile("/etc/os-release")))
-    if (l.rfind("PRETTY_NAME=", 0) == 0) {
-      std::string v = l.substr(12);
-      v.erase(std::remove(v.begin(), v.end(), '"'), v.end());
-      return v;
-    }
-  return "?";
-}
-
-std::string Env(const char* name) {
-  const char* v = std::getenv(name);
-  return v && *v ? v : "-";
-}
-
 std::vector<fs::path> LogFiles(const fs::path& dir) {
   std::vector<fs::path> files;
   std::error_code ec;
@@ -122,14 +97,7 @@ std::string Gh2WriteProblemReport(std::string& error, bool with_screenshot, bool
   r << (install.empty() ? "(no install.json: a development build)\n" : install + "\n");
 
   r << Section("System");
-  utsname u{};
-  uname(&u);
-  const std::string cpu = ReadFile("/proc/cpuinfo"), mem = ReadFile("/proc/meminfo");
-  r << "OS: " << OsRelease() << "\nKernel: " << u.release << " " << u.machine << "\n";
-  r << "Session: " << Env("XDG_SESSION_TYPE") << ", desktop " << Env("XDG_CURRENT_DESKTOP") << ", Wayland display "
-    << Env("WAYLAND_DISPLAY") << "\n";
-  r << "CPU: " << FirstValue(cpu, "model name") << " (" << std::thread::hardware_concurrency() << " threads)\n";
-  r << "RAM: total " << FirstValue(mem, "MemTotal") << ", available " << FirstValue(mem, "MemAvailable") << "\n";
+  r << gh2os::DescribeSystem();   // OS, kernel/build, session, CPU, RAM
 
   r << Section("Settings in use");
   for (const char* name :
@@ -176,9 +144,11 @@ std::string Gh2WriteProblemReport(std::string& error, bool with_screenshot, bool
 
   // Keep the user's name out of a public issue: the home folder becomes "~".
   std::string text = r.str();
-  if (const char* home = std::getenv("HOME"); home && *home && std::string(home) != "/") {
-    const std::string h = home;
-    for (size_t pos = 0; (pos = text.find(h, pos)) != std::string::npos; pos += 1) text.replace(pos, h.size(), "~");
+  if (const std::string h = gh2os::HomeDir(); !h.empty() && h != "/") {
+    std::string alt = h;   // (Windows paths show up with either slash)
+    std::replace(alt.begin(), alt.end(), '\\', '/');
+    for (const std::string& needle : {h, alt})
+      for (size_t pos = 0; (pos = text.find(needle, pos)) != std::string::npos; pos += 1) text.replace(pos, needle.size(), "~");
   }
   const fs::path out = logs / fname;
   std::ofstream f(out, std::ios::binary);

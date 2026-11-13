@@ -1,8 +1,6 @@
 #include "gh2k/vfs.h"
 
-#include <fcntl.h>
-#include <sys/stat.h>
-#include <unistd.h>
+#include "fileio.h"
 
 #include <algorithm>
 #include <cerrno>
@@ -30,14 +28,12 @@ std::string Slashes(std::string_view s) {
 }  // namespace
 
 struct Vfs::Open_ {
-  int fd = -1;
+  fio::Handle fd = fio::kInvalid;
   bool directory = false;
   uint64_t size = 0;
   std::atomic<uint64_t> position{0};
   std::shared_ptr<FileRecord> record;
-  ~Open_() {
-    if (fd >= 0) ::close(fd);
-  }
+  ~Open_() { fio::Close(fd); }
 };
 
 Vfs::Vfs() = default;
@@ -133,21 +129,23 @@ NtStatus Vfs::Open(std::string_view guest_path, uint32_t* handle) {
     ++open_failures_;
     return status;
   }
-  const int fd = ::open(host->c_str(), O_RDONLY | O_CLOEXEC);
-  if (fd < 0) {
+  bool denied = false;
+  const fio::Handle fd = fio::OpenRead(*host, &denied);
+  if (!fio::Valid(fd)) {
     ++open_failures_;
-    return errno == EACCES ? kStatusAccessDenied : kStatusObjectNameNotFound;
+    return denied ? kStatusAccessDenied : kStatusObjectNameNotFound;
   }
-  struct stat st;
-  if (::fstat(fd, &st) != 0) {
-    ::close(fd);
+  uint64_t size = 0;
+  bool is_directory = false;
+  if (!fio::Stat(fd, &size, &is_directory)) {
+    fio::Close(fd);
     ++open_failures_;
     return kStatusIoDeviceError;
   }
   auto file = std::make_shared<Open_>();
   file->fd = fd;
-  file->directory = S_ISDIR(st.st_mode);
-  file->size = static_cast<uint64_t>(st.st_size);
+  file->directory = is_directory;
+  file->size = size;
   std::lock_guard<std::mutex> lock(mu_);
   std::shared_ptr<FileRecord> rec;   // one record per distinct host file
   for (auto& r : records_)
@@ -188,11 +186,8 @@ NtStatus Vfs::Read(uint32_t handle, uint64_t offset, void* buffer, uint32_t leng
   }
   uint32_t done = 0;
   while (done < length) {
-    const ssize_t n = ::pread(f->fd, static_cast<uint8_t*>(buffer) + done, length - done, static_cast<off_t>(at + done));
-    if (n < 0) {
-      if (errno == EINTR) continue;
-      return kStatusIoDeviceError;
-    }
+    const int64_t n = fio::ReadAt(f->fd, static_cast<uint8_t*>(buffer) + done, length - done, at + done);
+    if (n < 0) return kStatusIoDeviceError;
     if (n == 0) break;
     done += static_cast<uint32_t>(n);
   }

@@ -47,9 +47,14 @@ bool Context::Initialize(const WindowInfo& window, std::string* error) {
 
   // ---- instance ----
   std::vector<const char*> extensions = {VK_KHR_SURFACE_EXTENSION_NAME};
+#if defined(VK_USE_PLATFORM_WIN32_KHR)
+  if (window.kind == WindowInfo::Kind::kWin32) extensions.push_back(VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
+  else return Fail(error, "no window to present to");
+#else
   if (window.kind == WindowInfo::Kind::kWayland) extensions.push_back(VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME);
   else if (window.kind == WindowInfo::Kind::kXlib) extensions.push_back(VK_KHR_XLIB_SURFACE_EXTENSION_NAME);
   else return Fail(error, "no window to present to");
+#endif
   std::vector<const char*> layers;
   if (validation) {
     extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
@@ -76,6 +81,12 @@ bool Context::Initialize(const WindowInfo& window, std::string* error) {
   }
 
   // ---- surface ----
+#if defined(VK_USE_PLATFORM_WIN32_KHR)
+  VkWin32SurfaceCreateInfoKHR sci = {VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR};
+  sci.hinstance = static_cast<HINSTANCE>(window.display);
+  sci.hwnd = reinterpret_cast<HWND>(window.surface);
+  r = vkCreateWin32SurfaceKHR(instance_, &sci, nullptr, &surface_);
+#else
   if (window.kind == WindowInfo::Kind::kWayland) {
     VkWaylandSurfaceCreateInfoKHR sci = {VK_STRUCTURE_TYPE_WAYLAND_SURFACE_CREATE_INFO_KHR};
     sci.display = static_cast<wl_display*>(window.display);
@@ -87,6 +98,7 @@ bool Context::Initialize(const WindowInfo& window, std::string* error) {
     sci.window = static_cast<Window>(window.surface);
     r = vkCreateXlibSurfaceKHR(instance_, &sci, nullptr, &surface_);
   }
+#endif
   if (r != VK_SUCCESS) return Fail(error, "creating the window surface", r);
 
   // ---- physical device: one that can present to the window, discrete GPUs first (GH2_VK_DEVICE picks by index or name part) ----

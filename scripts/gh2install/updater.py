@@ -8,13 +8,27 @@ import json
 import os
 import re
 import shutil
+import subprocess
+import sys
 import urllib.request
 
 from . import __version__
 
 REPO = "jillsandwich1998/reGH2"
 APPIMAGE_NAME = "reGH2-x86_64.AppImage"
+SETUP_PATTERN = re.compile(r"^reGH2-Setup-.+\.exe$")   # Windows: the installer of the release
 SUMS_NAME = "SHA256SUMS.txt"
+WINDOWS = sys.platform == "win32"
+
+
+def pick_asset(assets):
+    """(name, url) of this system's file in a release's {name: url}, or None."""
+    if WINDOWS:
+        for name in sorted(assets, reverse=True):
+            if SETUP_PATTERN.match(name or ""):
+                return name, assets[name]
+        return None
+    return (APPIMAGE_NAME, assets[APPIMAGE_NAME]) if APPIMAGE_NAME in assets else None
 
 
 class UpdateError(Exception):
@@ -53,11 +67,12 @@ def latest(timeout=6):
         if rel.get("draft") or not ver:
             continue
         assets = {a.get("name"): a.get("browser_download_url") for a in rel.get("assets", [])}
-        if APPIMAGE_NAME not in assets or SUMS_NAME not in assets:
+        mine = pick_asset(assets)
+        if not mine or SUMS_NAME not in assets:
             continue
         if not best or ver > best["tuple"]:
             best = {"tuple": ver, "version": ".".join(map(str, ver)), "tag": rel["tag_name"], "notes": rel.get("body") or "",
-                    "page": rel.get("html_url", ""), "appimage": assets[APPIMAGE_NAME], "sums": assets[SUMS_NAME]}
+                    "page": rel.get("html_url", ""), "asset_name": mine[0], "asset": mine[1], "appimage": mine[1], "sums": assets[SUMS_NAME]}
     return best
 
 
@@ -75,6 +90,8 @@ def check_enabled(config_path=None):
 
 
 def config_file():
+    if WINDOWS:
+        return os.path.join(os.environ.get("APPDATA") or os.path.expanduser("~"), "reGH2", "launcher.json")
     base = os.environ.get("XDG_CONFIG_HOME") or os.path.join(os.path.expanduser("~"), ".config")
     return os.path.join(base, "gh2-recomp", "launcher.json")
 
@@ -94,7 +111,8 @@ def target_appimage():
 def download(info, dest_dir, progress=None, timeout=30):
     """Downloads the release's AppImage into dest_dir as a hidden temporary file, checks its sha256 against the release's
     SHA256SUMS.txt and returns the path. progress(fraction) is optional."""
-    for u in (info["appimage"], info["sums"]):
+    name = info.get("asset_name", APPIMAGE_NAME)
+    for u in (info.get("asset", info["appimage"]), info["sums"]):
         if not _trusted(u):
             raise UpdateError("refusing a download address that is not https: " + u)
     try:
@@ -105,14 +123,14 @@ def download(info, dest_dir, progress=None, timeout=30):
     want = None
     for line in sums.splitlines():
         parts = line.split()
-        if len(parts) >= 2 and parts[-1].lstrip("*") == APPIMAGE_NAME:
+        if len(parts) >= 2 and parts[-1].lstrip("*") == name:
             want = parts[0].lower()
     if not want:
-        raise UpdateError("the release has no checksum for " + APPIMAGE_NAME)
-    tmp = os.path.join(dest_dir, ".%s.part" % APPIMAGE_NAME)
+        raise UpdateError("the release has no checksum for " + name)
+    tmp = os.path.join(dest_dir, ".%s.part" % name)
     h = hashlib.sha256()
     try:
-        with _get(info["appimage"], timeout) as r, open(tmp, "wb") as f:
+        with _get(info.get("asset", info["appimage"]), timeout) as r, open(tmp, "wb") as f:
             total = int(r.headers.get("Content-Length") or 0)
             done = 0
             while True:
@@ -130,7 +148,8 @@ def download(info, dest_dir, progress=None, timeout=30):
     if h.hexdigest() != want:
         _rm(tmp)
         raise UpdateError("the downloaded file does not match its checksum; nothing was changed")
-    os.chmod(tmp, 0o755)
+    if not WINDOWS:
+        os.chmod(tmp, 0o755)
     return tmp
 
 
@@ -141,10 +160,26 @@ def _rm(path):
         pass
 
 
+def apply_windows(info, progress=None, log=print):
+    """Downloads the new Setup.exe (checked against SHA256SUMS.txt) and starts it silently: it closes the launcher, replaces the program files and
+    starts the launcher again. The built game and the saves are not touched. Returns (path of the Setup.exe, True)."""
+    import tempfile
+    folder = tempfile.mkdtemp(prefix="reGH2-update-")
+    tmp = download(info, folder, progress)
+    final = os.path.join(folder, info["asset_name"])
+    os.replace(tmp, final)
+    log("Starting %s" % final)
+    subprocess.Popen([final, "/SILENT", "/SUPPRESSMSGBOXES", "/CLOSEAPPLICATIONS", "/RESTARTAPPLICATIONS", "/NORESTART"], close_fds=True,
+                     creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP)
+    return final, True
+
+
 def apply(info, progress=None, log=print):
     """Downloads the new AppImage and puts it where the running one is (an atomic rename, so a running game or launcher is not
     disturbed). If that folder is not writable, or this is not an AppImage, the file goes to ~/Downloads instead.
-    Returns (path, replaced)."""
+    Returns (path, replaced). On Windows: apply_windows."""
+    if WINDOWS:
+        return apply_windows(info, progress, log)
     target = target_appimage()
     if target and os.access(os.path.dirname(target), os.W_OK):
         tmp = download(info, os.path.dirname(target), progress)

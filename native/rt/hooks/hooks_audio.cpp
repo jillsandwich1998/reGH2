@@ -17,12 +17,10 @@
 #include <gh2rt/boundary_trace.h>
 #include <gh2rt/host_services.h>
 
+#include <gh2k/host_addr.h>
+#include <gh2os/os.h>
+
 #include <atomic>
-#include <pthread.h>
-#include <sched.h>
-#include <sys/resource.h>
-#include <sys/syscall.h>
-#include <unistd.h>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -77,12 +75,12 @@ bool Active() {
 
 uint32_t Be32(const uint8_t* b, uint32_t a) {
   uint32_t v;
-  std::memcpy(&v, b + a, 4);
+  std::memcpy(&v, gh2k::HostAddr(b, a), 4);
   return __builtin_bswap32(v);
 }
 void PutBe32(uint8_t* b, uint32_t a, uint32_t v) {
   v = __builtin_bswap32(v);
-  std::memcpy(b + a, &v, 4);
+  std::memcpy(gh2k::HostAddr(b, a), &v, 4);
 }
 
 std::string StatsLineOf(Client& c) {
@@ -108,20 +106,9 @@ std::string AudioStatsLine() {
 // GH2_AUDIO_RT=0 turns this off.
 void RaiseAudioThreadPriority() {
   if (const char* e = getenv("GH2_AUDIO_RT"); e && e[0] == '0') return;
-  struct rlimit rt = {};
-  if (getrlimit(RLIMIT_RTTIME, &rt) == 0 && (rt.rlim_cur == RLIM_INFINITY || rt.rlim_cur > 1000000)) {
-    rt.rlim_cur = 1000000;   // 1 s of CPU without sleeping
-    if (rt.rlim_max != RLIM_INFINITY && rt.rlim_max < rt.rlim_cur) rt.rlim_cur = rt.rlim_max;
-    setrlimit(RLIMIT_RTTIME, &rt);
-  }
-  sched_param param = {};
-  param.sched_priority = 4;
-  if (pthread_setschedparam(pthread_self(), SCHED_RR, &param) == 0) {
-    fprintf(stderr, "AUDIO mixer thread: real-time round-robin priority %d\n", param.sched_priority);
-    return;
-  }
-  if (setpriority(PRIO_PROCESS, static_cast<id_t>(syscall(SYS_gettid)), -8) == 0) fprintf(stderr, "AUDIO mixer thread: nice -8 (no real-time permission)\n");
-  else fprintf(stderr, "AUDIO mixer thread: normal priority (no permission to raise it)\n");
+  const std::string what = gh2os::RaiseCurrentThreadForAudio();   // POSIX: SCHED_RR 4, else nice -8; Windows: THREAD_PRIORITY_HIGHEST
+  if (what.empty()) fprintf(stderr, "AUDIO mixer thread: normal priority (no permission to raise it)\n");
+  else fprintf(stderr, "AUDIO mixer thread: %s\n", what.c_str());
 }
 
 // XAudioRegisterRenderDriverClient(callback_ptr -> {callback, argument}, driver_ptr*) -> status
@@ -151,6 +138,11 @@ REX_EXTERN(__wrap___imp__XAudioRegisterRenderDriverClient) {
   options.on_frame_consumed = [](void* self) { static_cast<Client*>(self)->credits.release(); };   // the output took a real frame: the game may produce another
   options.on_frame_consumed_user = client;
   options.log = [](const char* line) { fprintf(stderr, "AUDIO %s\n", line); };
+  // No output device (none plugged in, or the only one is a monitor's that sleeps): the game still needs its frames taken at the real rate, and it does not
+  // survive a failed registration (the runtime's own driver would fail the same way). The sink then consumes with its software clock, silent, and switches
+  // to a device as soon as one can be opened.
+  options.clock_until_device = true;
+  if (const char* e = getenv("GH2_TEST_AUDIO_LATE"); e && *e) options.pretend_no_device_ms = uint32_t(atoi(e)) * 1000u;   // testing aid: no device for N seconds
   if (!client->sink.Open(options)) {
     fprintf(stderr, "AUDIO pump native: the sink did not open; leaving the audio to the runtime\n");
     delete client;

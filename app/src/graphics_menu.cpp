@@ -17,6 +17,7 @@
 
 #include <SDL3/SDL_dialog.h>
 #include <imgui.h>
+#include <gh2os/os.h>
 #include <rex/cvar.h>
 #include <rex/runtime.h>
 #include <rex/string/utf8.h>
@@ -94,14 +95,11 @@ void DimWrapped(const char* fmt, ...) {
 }
 
 // Where the game keeps the player's saves, installed DLC and achievements.
-std::filesystem::path Gh2SaveDir() {
-  if (const char* x = std::getenv("XDG_DATA_HOME"); x && *x) return std::filesystem::path(x) / "gh2";
-  const char* h = std::getenv("HOME");
-  return std::filesystem::path(h ? h : "") / ".local" / "share" / "gh2";
-}
+std::filesystem::path Gh2SaveDir() { return std::filesystem::path(gh2os::DataDir()); }
 
 std::string ShortenHome(std::string path) {
-  if (const char* h = std::getenv("HOME"); h && *h && path.rfind(h, 0) == 0) path.replace(0, std::strlen(h), "~");
+  const std::string h = gh2os::HomeDir();
+  if (!h.empty() && path.rfind(h, 0) == 0) path.replace(0, h.size(), "~");
   return path;
 }
 
@@ -128,9 +126,7 @@ bool CaptureGamePng(const std::string& path) {
 // The game runs with its own copy of the C++ runtime first on LD_LIBRARY_PATH; a system program started from here (the file
 // manager, which uses the system's newer libstdc++) must not inherit it or it dies on start without a word.
 void OpenFolder(const std::string& dir) {
-  std::thread([dir] {
-    std::system(("env -u LD_LIBRARY_PATH -u LD_PRELOAD xdg-open '" + dir + "' >/dev/null 2>&1").c_str());
-  }).detach();
+  std::thread([dir] { gh2os::OpenWithDesktop(dir); }).detach();   // xdg-open without our libraries (POSIX) | ShellExecute (Windows)
 }
 
 std::string Get(const char* name) { return rex::cvar::GetFlagByName(name); }
@@ -1164,10 +1160,10 @@ void Gh2InstallGraphicsMenu(rex::Runtime* runtime, rex::ui::Presenter* presenter
       std::this_thread::sleep_for(std::chrono::seconds(delay));
       if (const char* dirty = std::getenv("GH2_TEST_OPEN_SAVES_LIBS")) {  // as in the installed game: our own libstdc++ on the path
         const char* old = std::getenv("LD_LIBRARY_PATH");
-        setenv("LD_LIBRARY_PATH", (std::string(dirty) + (old ? std::string(":") + old : "")).c_str(), 1);
+        gh2os::SetEnv("LD_LIBRARY_PATH", (std::string(dirty) + (old ? std::string(":") + old : "")).c_str(), true);
       }
       OpenFolder(Gh2SaveDir().string());
-      fprintf(stderr, "TEST_OPEN_SAVES asked to open %s\n", Gh2SaveDir().c_str());
+      fprintf(stderr, "TEST_OPEN_SAVES asked to open %s\n", Gh2SaveDir().string().c_str());
     }).detach();
   }
   if (const char* t = std::getenv("GH2_TEST_SHOT")) {  // testing aid: what F9 does, at the given seconds ("30" or "30,34,38"), counted from the start of the game

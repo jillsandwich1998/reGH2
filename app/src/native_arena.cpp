@@ -94,7 +94,7 @@ bool Gh2InstallNativeArena() {
     fprintf(stderr, "ARENA native reservation failed (%s): the runtime makes its own\n", error.c_str());
     return false;
   }
-  const rex::memory::ExternalArena external{arena->base(), arena->fd()};
+  const rex::memory::ExternalArena external{arena->base(), arena->file()};   // fd (POSIX) / section HANDLE (Windows), both an intptr_t
   rex::memory::SetExternalArena(&external);
   fprintf(stderr, "ARENA native: guest address space at %p (gh2k::mem)\n", static_cast<void*>(arena->base()));
   if (REXCVAR_GET(heaps) == "native") {

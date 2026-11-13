@@ -5,7 +5,9 @@
 //  - pipeline_cache.bin: the driver's own cache blob (VkPipelineCache), loaded at start and saved while the game runs. A pipeline the driver has compiled before costs a fraction of that.
 //  - pipelines.list: the description of every pipeline the game has asked for, in order of first use. At start a low-priority thread builds them all (with the driver's cache, usually quickly)
 //    while the game is still in its intro; a draw that needs one finds it done (or waits for the few milliseconds that are left when the thread is just building it).
-// A pipeline nobody listed yet is built by the draw that needs it, as before, and joins the list: only the very first run of a game on a machine compiles on demand.
+// A pipeline nobody listed yet (only the first time a machine sees that scene) is compiled by a pool of threads, side by side with the others the scene asks for, and joins
+// the list; the draw waits for it within a small budget per frame and is otherwise skipped until it is ready, so a new venue costs a missing object for a frame or two
+// instead of frames of 0.1-0.8 s. GH2_PIPELINE_ASYNC=0 builds it in the draw, as before. Same code on Linux and Windows.
 #include <algorithm>
 #include <cstdlib>
 #include <cstring>
@@ -13,9 +15,7 @@
 #include <fstream>
 #include <iterator>
 
-#include <sys/resource.h>
-#include <sys/syscall.h>
-#include <unistd.h>
+#include <gh2os/os.h>
 
 #include "impl.h"
 
@@ -74,9 +74,7 @@ bool Listable(const PipelineDesc& d) { return (d.vs_hash >> 48) != 0xDEB0 && (d.
 
 std::string DefaultDirectory() {
   if (const char* e = std::getenv("GH2_PIPELINE_CACHE_DIR"); e && *e) return e;
-  if (const char* x = std::getenv("XDG_CACHE_HOME"); x && *x) return std::string(x) + "/gh2";
-  if (const char* h = std::getenv("HOME"); h && *h) return std::string(h) + "/.cache/gh2";
-  return {};
+  return gh2os::CacheDir();   // $XDG_CACHE_HOME/gh2 or ~/.cache/gh2 | %LOCALAPPDATA%\gh2\cache
 }
 
 }  // namespace
@@ -168,7 +166,131 @@ VkPipeline Renderer::Impl::GetPipeline(const PipelineDesc& desc) {
   const std::string key = Serialize(desc);
   auto found = pipelines.find(key);
   if (found != pipelines.end()) return found->second;
+  if (!async_pipelines || compile_workers.empty()) return GetPipelineBlocking(desc, key);
 
+  // being built (by the thread of the listed pipelines or by the pool), or new: then the pool builds it
+  std::shared_ptr<AheadEntry> entry;
+  bool queue_it = false;
+  {
+    std::lock_guard<std::mutex> lock(ahead_mutex);
+    auto it = ahead.find(key);
+    if (it != ahead.end()) {
+      entry = it->second;
+    } else {
+      entry = std::make_shared<AheadEntry>();
+      entry->by_pool = true;
+      ahead.emplace(key, entry);   // claimed: the thread of the listed pipelines skips it
+      queue_it = true;
+    }
+  }
+  if (queue_it) {
+    {
+      std::lock_guard<std::mutex> lock(compile_mutex);
+      compile_queue.push_back(CompileJob{key, desc, entry});
+      const uint64_t depth = compile_queue.size();
+      uint64_t seen = compile_queue_max.load();
+      while (depth > seen && !compile_queue_max.compare_exchange_weak(seen, depth)) {
+      }
+    }
+    compile_cv.notify_one();
+  }
+
+  // wait for it within what is left of this frame's budget
+  if (frame != budget_frame) {
+    budget_frame = frame;
+    budget_used_ns = 0;
+  }
+  const uint64_t left = budget_used_ns < wait_budget_ns ? wait_budget_ns - budget_used_ns : 0;
+  const auto t0 = std::chrono::steady_clock::now();
+  VkPipeline pipeline = VK_NULL_HANDLE;
+  bool ready;
+  {
+    std::unique_lock<std::mutex> lock(ahead_mutex);
+    ready = ahead_cv.wait_for(lock, std::chrono::nanoseconds(left), [&] { return entry->done; });
+    if (ready) {
+      pipeline = entry->pipeline;
+      ahead.erase(key);
+    }
+  }
+  const uint64_t waited = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - t0).count());
+  budget_used_ns += waited;
+  ahead_wait_ns += waited;
+  if (!ready) {   // skipped this frame; drawn from the frame its pipeline is ready in
+    ++draws_waiting_pipeline;
+    return VK_NULL_HANDLE;
+  }
+  if (entry->by_pool) {
+    ++pipelines_async;
+    NotePipelineUsed(desc, key);
+  } else {
+    ++ahead_hits;
+  }
+  pipelines[key] = pipeline;
+  return pipeline;
+}
+
+// The pool: builds the pipelines the draws hand it, in the order they asked for them.
+void Renderer::Impl::CompileWorkerMain() {
+  for (;;) {
+    CompileJob job;
+    {
+      std::unique_lock<std::mutex> lock(compile_mutex);
+      compile_cv.wait(lock, [&] { return compile_stop || !compile_queue.empty(); });
+      if (compile_stop) return;
+      job = std::move(compile_queue.front());
+      compile_queue.pop_front();
+    }
+    const auto t0 = std::chrono::steady_clock::now();
+    VkPipeline pipeline = BuildPipeline(job.desc);   // (vkCreateGraphicsPipelines and the pipeline cache are thread-safe; the shader modules exist already)
+    const uint64_t ns = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - t0).count());
+    ++pipelines_on_demand;
+    on_demand_ns += ns;
+    uint64_t seen = on_demand_max_ns.load();
+    while (ns > seen && !on_demand_max_ns.compare_exchange_weak(seen, ns)) {
+    }
+    {
+      std::lock_guard<std::mutex> lock(ahead_mutex);
+      job.entry->pipeline = pipeline;
+      job.entry->done = true;
+    }
+    ahead_cv.notify_all();
+  }
+}
+
+void Renderer::Impl::StartCompilePool() {
+  if (!compile_workers.empty()) return;
+  if (const char* e = std::getenv("GH2_PIPELINE_ASYNC"); e && e[0] == '0') async_pipelines = false;
+  if (const char* e = std::getenv("GH2_PIPELINE_WAIT_MS"); e && *e) wait_budget_ns = static_cast<uint64_t>(std::max(0.0, std::atof(e)) * 1e6);
+  if (!async_pipelines) {
+    std::fprintf(stderr, "RENDER pipelines: built by the draw that needs them (GH2_PIPELINE_ASYNC=0)\n");
+    return;
+  }
+  // a few threads: the game keeps its own (a 4-core CPU gets 2); the drivers compile one pipeline per thread
+  const unsigned cores = std::max(2u, std::thread::hardware_concurrency());
+  const unsigned n = std::clamp(cores / 3, 2u, 6u);
+  compile_stop = false;
+  for (unsigned i = 0; i < n; ++i)
+    compile_workers.emplace_back([this, i] {
+      gh2os::SetCurrentThreadName(("gh2-pipeline" + std::to_string(i)).c_str());
+      CompileWorkerMain();
+    });
+  std::fprintf(stderr, "RENDER pipelines: new ones are compiled by %u threads; the draws of a frame wait %.1f ms for them in all, then go without them until they are ready\n", n,
+               wait_budget_ns / 1e6);
+}
+
+void Renderer::Impl::StopCompilePool() {
+  {
+    std::lock_guard<std::mutex> lock(compile_mutex);
+    compile_stop = true;
+    compile_queue.clear();   // (their entries stay in `ahead`, never done: nothing waits for them any more)
+  }
+  compile_cv.notify_all();
+  for (std::thread& t : compile_workers) t.join();
+  compile_workers.clear();
+}
+
+// GH2_PIPELINE_ASYNC=0 (and no pool): the draw builds a new pipeline itself and waits for one the thread of the listed pipelines is building.
+VkPipeline Renderer::Impl::GetPipelineBlocking(const PipelineDesc& desc, const std::string& key) {
   std::shared_ptr<AheadEntry> entry;
   bool mine = false;
   {
@@ -219,11 +341,13 @@ VkPipeline Renderer::Impl::GetPipeline(const PipelineDesc& desc) {
 
 void Renderer::Impl::StartPipelineThread() {
   if (pipeline_thread.joinable()) return;
+  StartCompilePool();
   thread_stop = false;
   pipeline_thread = std::thread([this] { PipelineThreadMain(); });
 }
 
 void Renderer::Impl::StopPipelineThread() {
+  StopCompilePool();   // before the device objects go (DestroyDeviceObjects)
   if (!pipeline_thread.joinable()) return;
   {
     std::lock_guard<std::mutex> lock(thread_mutex);
@@ -235,7 +359,7 @@ void Renderer::Impl::StopPipelineThread() {
 }
 
 void Renderer::Impl::PipelineThreadMain() {
-  setpriority(PRIO_PROCESS, static_cast<id_t>(syscall(SYS_gettid)), 10);   // the game's own threads come first
+  gh2os::LowerCurrentThreadPriority();   // the game's own threads come first
   std::vector<std::string> todo;
   {
     std::lock_guard<std::mutex> lock(list_mutex);

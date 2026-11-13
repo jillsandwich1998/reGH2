@@ -247,12 +247,14 @@ class Installer:
         """Saves, installed DLC, achievements and the shader cache. Shared by every build of the game, kept by default."""
         return os.path.join(os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share"), "gh2")
 
+    EXPORT_SKIP = ("cache", "0000000000000000")   # folders of the data directory that are not the player's (shader/pipeline caches, installed DLC)
+
     def export_saves(self, dest_dir):
         """Zips the save game (the player's profile) and the achievements into dest_dir. The shader cache and the installed
         DLC (a big folder that can be installed again) are left out. Returns the path of the zip."""
         import zipfile
         root = self.user_data_dir()
-        skip = ("cache", "0000000000000000")
+        skip = self.EXPORT_SKIP
         files = []
         if os.path.isdir(root):
             for entry in sorted(os.listdir(root)):
@@ -330,23 +332,31 @@ class Installer:
         shortcut.remove(log=self.log)
         return items, keep
 
+    def system_report_lines(self, first):
+        """The "System" lines of write_report (Windows: gh2install/win.py has its own). `first(path, key)` reads a "key: value" file."""
+        import platform
+        return ["OS: " + platform.freedesktop_os_release().get("PRETTY_NAME", "?") if hasattr(platform, "freedesktop_os_release") else "OS: ?",
+                "Kernel: " + platform.release() + " " + platform.machine(),
+                "Session: %s, desktop %s" % (os.environ.get("XDG_SESSION_TYPE", "-"), os.environ.get("XDG_CURRENT_DESKTOP", "-")),
+                "CPU: %s (%s threads)" % (first("/proc/cpuinfo", "model name"), os.cpu_count()),
+                "RAM: total %s, available %s" % (first("/proc/meminfo", "MemTotal"), first("/proc/meminfo", "MemAvailable"))]
+
     def write_report(self):
         """Problem report from outside the game (for when it will not start or has crashed): install record, system, the
         game's settings and the tails of its logs. The home folder is replaced by "~" so it can go into a public issue."""
-        import platform
         logs = os.path.join(self.prefix, "app", "logs")
         os.makedirs(logs, exist_ok=True)
 
         def tail(path, n):
             try:
-                with open(path, errors="replace") as f:
+                with open(path, encoding="utf-8", errors="replace") as f:
                     return "".join(f.readlines()[-n:])
             except OSError:
                 return "(not found)\n"
 
         def first(path, key):
             try:
-                for line in open(path):
+                for line in open(path, encoding="utf-8", errors="replace"):
                     if line.startswith(key):
                         return line.split(":", 1)[1].strip()
             except OSError:
@@ -358,11 +368,7 @@ class Installer:
         out = ["reGH2 problem report (made by the launcher)", "Created: " + time.strftime("%Y-%m-%d %H:%M:%S"),
                "Attach this file to a GitHub issue and say what you were doing when the problem happened.", "",
                "===== Install =====", json.dumps(meta, indent=1) if meta else "not installed", "",
-               "===== System =====", "OS: " + platform.freedesktop_os_release().get("PRETTY_NAME", "?") if hasattr(platform, "freedesktop_os_release") else "OS: ?",
-               "Kernel: " + platform.release() + " " + platform.machine(),
-               "Session: %s, desktop %s" % (os.environ.get("XDG_SESSION_TYPE", "-"), os.environ.get("XDG_CURRENT_DESKTOP", "-")),
-               "CPU: %s (%s threads)" % (first("/proc/cpuinfo", "model name"), os.cpu_count()),
-               "RAM: total %s, available %s" % (first("/proc/meminfo", "MemTotal"), first("/proc/meminfo", "MemAvailable")), "",
+               "===== System =====", *self.system_report_lines(first), "",
                "===== Game settings (app/gh2.toml) =====", tail(os.path.join(self.prefix, "app", "gh2.toml"), 60), "",
                "===== Slowdown log (last 40 lines) =====", tail(os.path.join(logs, "perf.log"), 40)]
         for label, f, n in (("Latest log", files[0] if files else None, 400), ("Previous log", files[1] if len(files) > 1 else None, 150)):
@@ -372,7 +378,7 @@ class Installer:
         if home and home != "/":
             text = text.replace(home, "~")
         path = os.path.join(logs, time.strftime("report-%Y%m%d-%H%M%S.txt"))
-        with open(path, "w") as f:
+        with open(path, "w", encoding="utf-8") as f:
             f.write(text)
         import zipfile  # the same single file to attach as the report made inside the game
         zip_path = path[:-4] + ".zip"

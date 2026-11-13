@@ -1,3 +1,4 @@
+#include "gh2k/host_addr.h"
 #include "graphics_state.h"
 
 #include <algorithm>
@@ -12,15 +13,15 @@ namespace {
 
 inline uint32_t Be32(const uint8_t* base, uint32_t guest_address) {
   uint32_t v;
-  std::memcpy(&v, base + guest_address, sizeof(v));
+  std::memcpy(&v, gh2k::HostAddr(base, guest_address), sizeof(v));
   return __builtin_bswap32(v);
 }
 inline uint32_t Be16(const uint8_t* base, uint32_t guest_address) {
   uint16_t v;
-  std::memcpy(&v, base + guest_address, sizeof(v));
+  std::memcpy(&v, gh2k::HostAddr(base, guest_address), sizeof(v));
   return __builtin_bswap16(v);
 }
-inline uint32_t Be8(const uint8_t* base, uint32_t guest_address) { return base[guest_address]; }
+inline uint32_t Be8(const uint8_t* base, uint32_t guest_address) { return *gh2k::HostAddr(base, guest_address); }
 
 // A guest pointer worth reading: aligned and inside the part of the address space the guest uses.
 inline bool Plausible(uint32_t p) { return p >= 0x10000 && p < 0xFFFF0000u && (p & 3) == 0; }

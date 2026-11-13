@@ -22,9 +22,9 @@ namespace gh2vk {
 
 // The window the renderer presents to: raw handles of the platform surface and the live size in pixels (updated by the application).
 struct WindowInfo {
-  enum class Kind : uint32_t { kNone, kWayland, kXlib } kind = Kind::kNone;
-  void* display = nullptr;       // wl_display* / Display*
-  uint64_t surface = 0;          // wl_surface* / Window
+  enum class Kind : uint32_t { kNone, kWayland, kXlib, kWin32 } kind = Kind::kNone;
+  void* display = nullptr;       // wl_display* / Display* / HINSTANCE
+  uint64_t surface = 0;          // wl_surface* / Window / HWND
   const std::atomic<uint32_t>* width = nullptr;
   const std::atomic<uint32_t>* height = nullptr;
 };

@@ -101,7 +101,7 @@ For a problem you can *see* (a wrong picture), press **F9** while it is on scree
 * The graphics memory grows as new venues and songs are loaded (textures are kept, not freed): about 1.0 GB at 4K after four songs on the test machine.
 * A short pause when a song loads, between the song screens, is part of how the game itself loads.
 * Tested in Quick Play and in Career up to the fourth venue. The later venues, Practice, co-op and DLC songs have not been played and need play-testing.
-* Windows is not supported yet.
+* Windows: a source build exists (see *Building on Windows*) and reaches the title screen at 60 fps on one machine; there is no installer or release yet, and input, audio and actual play have not been verified.
 
 ## Requirements
 
@@ -155,6 +155,36 @@ native/third_party/fetch.sh                              # XenosRecomp (patched 
 scripts/gh2-recomp --sdk ~/gh2-sdk install <your game>   # codegen + build, needs clang >= 20, cmake, ninja
 scripts/gh2-recomp --sdk ~/gh2-sdk launch
 ```
+## Windows installer (experimental)
+
+`reGH2-Setup-<version>.exe` installs for your user only (no administrator rights) into `%LOCALAPPDATA%\Programs\reGH2`: the launcher, the game's host already
+built (`gh2.exe`: the runtime, the hooks and the Vulkan renderer), and the tools that compile the rest (llvm-mingw, Ninja, Python, the code generator of the patched SDK, the
+shader tools). Open **reGH2**, pick your own copy of Guitar Hero II (the `.iso`, the extracted files or the folder with `default.xex`) and press **Install**: the game's
+code is translated from your `default.xex` and compiled on your PC into `gh2game.dll` (about a minute of compiling on a fast CPU), and the launcher shows it as it happens
+(the current step, the file being compiled, the time so far and an estimate of what is left, and the compiler's own output). Nothing is downloaded and nothing from
+Microsoft has to be installed: llvm-mingw (clang, lld, libc++, mingw-w64) is redistributable, so the package carries it. The only requirement is a Vulkan driver, which
+the launcher checks. The built game goes to `%LOCALAPPDATA%\reGH2\game`, saves and the shader cache to `%LOCALAPPDATA%\gh2`; uninstalling asks before touching the
+saves. The installer is not code-signed, so Windows SmartScreen may warn. Build it with `packaging\windows\make-installer.ps1` (needs Inno Setup 6).
+
+## Building on Windows (experimental)
+
+Windows 11, Visual Studio 2022 Build Tools (C++ workload, for the Windows SDK and the C runtime), LLVM 20 or newer (clang, lld), CMake, Ninja, Git, Python 3, the
+Vulkan SDK and [llvm-mingw](https://github.com/mstorsjo/llvm-mingw) (the UCRT x86_64 build; point `GH2_LLVM_MINGW` at it). The generated game code is built as
+`gh2game.dll` with llvm-mingw and the host (`gh2.exe`) loads it at start (`native/rt/module`: only plain C crosses between the two). The renderer is the same Vulkan one as on Linux; the SDK's own graphics backend is not used (its Windows build is Direct3D 12 only and serves as the
+application shell and code generator).
+
+```powershell
+powershell -File scripts\windows\build-sdk.ps1 -Prefix C:\Users\you\gh2\sdk      # patched ReXGlue SDK (pinned commit + sdk-patches/)
+powershell -File native\third_party\fetch.ps1                                    # XenosRecomp, patched
+powershell -File native\tools\build_xenosrecomp.ps1
+py scripts\windows\gh2win.py build --full --sdk C:\Users\you\gh2\sdk --game <folder with default.xex>
+py scripts\windows\gh2win.py launch
+py scripts\windows\gh2win.py make-host --out <folder>                       # the prebuilt host the installer ships (host\)
+```
+With a prebuilt host (`GH2_HOST_DIR=<folder>`, or the package's `host\`), `build` and `install` compile only the game module, as on a player's PC.
+The first start makes the shader cache (about 12 s). Data goes to `%LOCALAPPDATA%\gh2`, settings to `gh2.toml` next to the executable. `scripts\windows\sample-threads.ps1`
+shows where every thread of a running game is (a poor man's profiler), and `native/platform/os/` is the one place for the operating-system services.
+
 The layout of the native runtime and renderer, and the rules that keep them apart from the SDK, are in `native/README.md` and
 `native/rt/abi/`. The AppImage is built by `packaging/` (Ubuntu 22.04 container, so it runs on older distributions as well).
 

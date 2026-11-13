@@ -31,8 +31,16 @@ if(NOT GH2_SIMDE_DIR)
 endif()
 set(GH2_SIMDE_ONLY_DIR "${CMAKE_CURRENT_BINARY_DIR}/simde_only")
 file(MAKE_DIRECTORY "${GH2_SIMDE_ONLY_DIR}")
-file(REMOVE "${GH2_SIMDE_ONLY_DIR}/simde")
-file(CREATE_LINK "${GH2_SIMDE_DIR}/simde" "${GH2_SIMDE_ONLY_DIR}/simde" SYMBOLIC)
+if(WIN32)
+    # (a copy: symbolic links need a privilege on Windows; the headers are only read)
+    if(NOT EXISTS "${GH2_SIMDE_ONLY_DIR}/simde/x86/sse4.1.h")
+        file(COPY "${GH2_SIMDE_DIR}/simde" DESTINATION "${GH2_SIMDE_ONLY_DIR}")
+    endif()
+    add_compile_definitions(NOMINMAX WIN32_LEAN_AND_MEAN _CRT_SECURE_NO_WARNINGS _CRT_NONSTDC_NO_WARNINGS)
+else()
+    file(REMOVE "${GH2_SIMDE_ONLY_DIR}/simde")
+    file(CREATE_LINK "${GH2_SIMDE_DIR}/simde" "${GH2_SIMDE_ONLY_DIR}/simde" SYMBOLIC)
+endif()
 
 add_library(gh2abi_contract INTERFACE)
 target_include_directories(gh2abi_contract INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/rt/abi/include")
@@ -43,18 +51,27 @@ target_include_directories(gh2abi_headers INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}
 target_include_directories(gh2abi_headers SYSTEM INTERFACE "${GH2_SIMDE_ONLY_DIR}")
 
 add_library(gh2_cpu_flags INTERFACE)
-target_compile_options(gh2_cpu_flags INTERFACE -mcmodel=large -msse4.1)
+if(WIN32)
+    target_compile_options(gh2_cpu_flags INTERFACE -msse4.1)   # (no -mcmodel=large: it is an ELF option; a COFF image stays under 2 GB)
+else()
+    target_compile_options(gh2_cpu_flags INTERFACE -mcmodel=large -msse4.1)
+endif()
 
 # ---- link flags: one --wrap per kernel import (GH2_TRACE_WRAP_FLAGS = generated tracing wrappers, GH2_HOOK_WRAP_FLAGS = the
 # hand-written hooks), both generated from contract/imports.txt and hooks/hooked_imports.txt by tools/gen_import_tracer.py.
 include("${CMAKE_CURRENT_SOURCE_DIR}/rt/trace/trace_wraps.cmake")
+if(WIN32)
+    # lld-link spells GNU ld's -Wl,--wrap=SYM as /wrap:SYM (checked with LLD 23 on __imp__ names: __wrap_X and __real_X resolve as with ld)
+    list(TRANSFORM GH2_TRACE_WRAP_FLAGS REPLACE "--wrap=" "/wrap:")
+    list(TRANSFORM GH2_HOOK_WRAP_FLAGS REPLACE "--wrap=" "/wrap:")
+endif()
 set(GH2_TRACE_WRAP_FLAGS ${GH2_TRACE_WRAP_FLAGS} PARENT_SCOPE)
 set(GH2_HOOK_WRAP_FLAGS ${GH2_HOOK_WRAP_FLAGS} PARENT_SCOPE)
 
 # ---- boundary tracer
 add_library(gh2rt_trace OBJECT rt/trace/boundary_trace.cpp rt/trace/import_trace.gen.cpp)
 target_include_directories(gh2rt_trace PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/rt/trace/include")
-target_link_libraries(gh2rt_trace PRIVATE gh2abi_headers gh2_cpu_flags)
+target_link_libraries(gh2rt_trace PRIVATE gh2abi_headers gh2_cpu_flags gh2os)
 
 # ---- hooks (they use the generated gh2_pch.h for the REX_LOAD_*/REX_STORE_* macros, never an SDK header)
 add_library(gh2rt_hooks OBJECT
@@ -80,7 +97,7 @@ add_library(gh2rt_hooks OBJECT
 target_include_directories(gh2rt_hooks
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/rt/hooks/include" "${CMAKE_CURRENT_SOURCE_DIR}/gfx/guest_d3d/include"
     PRIVATE "${REXGLUE_ENTRYPOINT_INCLUDE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/rt/hooks")
-target_link_libraries(gh2rt_hooks PRIVATE gh2abi_headers gh2_cpu_flags gh2rt_trace gh2k_vfs gh2k_sync gh2k_thread gh2plat_audio gh2gpu gh2render)
+target_link_libraries(gh2rt_hooks PRIVATE gh2abi_headers gh2_cpu_flags gh2rt_trace gh2k_vfs gh2k_sync gh2k_thread gh2plat_audio gh2gpu gh2render gh2os gh2k_hostaddr)
 add_dependencies(gh2rt_hooks gh2_codegen)
 
 # ---- the generated game code against the shim (used when GH2_ISOLATED_CPU=ON)
@@ -90,17 +107,61 @@ target_link_libraries(gh2_cpu PRIVATE gh2abi_headers gh2_cpu_flags)
 rexglue_apply_recomp_settings(gh2_cpu "${REXGLUE_ENTRYPOINT_INCLUDE_DIR}/gh2_pch.h")
 add_dependencies(gh2_cpu gh2_codegen)
 
+# ---- the game module (GH2_GAME_MODULE=ON, the Windows default): the generated code is not linked into the executable but built as
+# gh2game.dll with llvm-mingw (native/tools/build_game_module.py), which the host loads at start (native/rt/module, gh2module/game_module.h).
+#   overrides.txt              the game functions the hooks replace: every sub_X / xstart the hooks' objects define (also what the module needs)
+#   gh2host_stubs.gen.cpp      the host's tables (imports, hooks) and its __imp__sub_X stubs onto the module's original code
+#   gh2game                    the module itself, next to the executable
+if(GH2_GAME_MODULE)
+    find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    set(GH2_MODULE_DIR "${CMAKE_CURRENT_BINARY_DIR}/module")
+    set(GH2_MODULE_OVERRIDES "${GH2_MODULE_DIR}/overrides.txt" PARENT_SCOPE)
+    set(GH2_MODULE_STUBS_TOOL "${CMAKE_CURRENT_SOURCE_DIR}/tools/gen_module_stubs.py")
+    set(GH2_IMPORTS_LIST "${CMAKE_CURRENT_SOURCE_DIR}/rt/abi/contract/imports.txt")
+    add_custom_command(OUTPUT "${GH2_MODULE_DIR}/overrides.txt"
+        COMMAND Python3::Interpreter "${GH2_MODULE_STUBS_TOOL}" overrides --nm "${CMAKE_NM}" --out "${GH2_MODULE_DIR}/overrides.txt" $<TARGET_OBJECTS:gh2rt_hooks>
+        DEPENDS $<TARGET_OBJECTS:gh2rt_hooks> "${GH2_MODULE_STUBS_TOOL}"
+        COMMENT "Listing the game functions the hooks override"
+        COMMAND_EXPAND_LISTS VERBATIM)
+    add_custom_command(OUTPUT "${GH2_MODULE_DIR}/gh2host_stubs.gen.cpp"
+        COMMAND Python3::Interpreter "${GH2_MODULE_STUBS_TOOL}" host --imports "${GH2_IMPORTS_LIST}" --overrides "${GH2_MODULE_DIR}/overrides.txt"
+                --out "${GH2_MODULE_DIR}/gh2host_stubs.gen.cpp"
+        DEPENDS "${GH2_MODULE_DIR}/overrides.txt" "${GH2_IMPORTS_LIST}" "${GH2_MODULE_STUBS_TOOL}"
+        VERBATIM)
+    add_library(gh2rt_module_host OBJECT rt/module/host_side.cpp "${GH2_MODULE_DIR}/gh2host_stubs.gen.cpp")
+    target_include_directories(gh2rt_module_host PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/rt/module/include")
+    target_link_libraries(gh2rt_module_host PRIVATE gh2abi_headers gh2_cpu_flags)
+
+    set(GH2_LLVM_MINGW "$ENV{GH2_LLVM_MINGW}" CACHE PATH "llvm-mingw (the directory with bin/clang++.exe) that builds the game module")
+    if(NOT EXISTS "${GH2_LLVM_MINGW}/bin/clang++.exe")
+        message(FATAL_ERROR "GH2_GAME_MODULE needs llvm-mingw: set GH2_LLVM_MINGW (now '${GH2_LLVM_MINGW}')")
+    endif()
+    # (always run: the module's own Ninja knows what is out of date and does nothing when nothing is)
+    add_custom_target(gh2game ALL
+        COMMAND Python3::Interpreter "${CMAKE_CURRENT_SOURCE_DIR}/tools/build_game_module.py"
+                --generated "${REXGLUE_ENTRYPOINT_INCLUDE_DIR}" --native "${CMAKE_CURRENT_SOURCE_DIR}" --simde "${GH2_SIMDE_ONLY_DIR}"
+                --overrides "${GH2_MODULE_DIR}/overrides.txt" --toolchain "${GH2_LLVM_MINGW}" --ninja "${CMAKE_MAKE_PROGRAM}"
+                --build "${GH2_MODULE_DIR}/game" --out "${CMAKE_BINARY_DIR}/gh2game.dll"
+        DEPENDS "${GH2_MODULE_DIR}/overrides.txt"
+        BYPRODUCTS "${CMAKE_BINARY_DIR}/gh2game.dll"
+        COMMENT "Building the game module (llvm-mingw)"
+        USES_TERMINAL VERBATIM)
+    add_dependencies(gh2game gh2_codegen)
+endif()
+
 # ---- the contract on top of the SDK (the interim backend)
 add_library(gh2rt_backend_rex STATIC EXCLUDE_FROM_ALL rt/backend_rex/backend_rex.cpp)
 target_include_directories(gh2rt_backend_rex PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/rt/trace/include")
 target_link_libraries(gh2rt_backend_rex PRIVATE gh2abi_contract rex::runtime)
 rexglue_apply_target_settings(gh2rt_backend_rex)
 
-# ---- platform: SDL3 input (dedicated polling thread, guitar classifier) and audio (frame queue + sink); the self-test tools are built on request
+# ---- platform: the OS services behind one API (gh2os), SDL3 input (dedicated polling thread, guitar classifier) and audio (frame queue + sink); the self-test tools are built on request
+add_subdirectory(platform/os)
 add_subdirectory(platform/input_sdl3 EXCLUDE_FROM_ALL)
 add_subdirectory(platform/audio_sdl3 EXCLUDE_FROM_ALL)
 
 # ---- kernel: the game's file system and the ARK reader (K.3)
+add_subdirectory(kernel/hostaddr)
 add_subdirectory(kernel/vfs)
 add_subdirectory(kernel/sync)
 add_subdirectory(kernel/mem)
@@ -116,7 +177,7 @@ if(GH2_XXHASH_PROBE)
     # the D3D shader observer (G.0): correlates what the game's D3D library binds with the shader cache; the hooks themselves are in gh2rt_hooks
     add_library(gh2gfx_guest_d3d STATIC EXCLUDE_FROM_ALL gfx/guest_d3d/observer.cpp gfx/guest_d3d/observer_install.cpp gfx/guest_d3d/graphics_state.cpp gfx/guest_d3d/fetch_scan.cpp)
     target_include_directories(gh2gfx_guest_d3d PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/gfx/guest_d3d" "${CMAKE_CURRENT_SOURCE_DIR}/gfx/guest_d3d/include")
-    target_link_libraries(gh2gfx_guest_d3d PUBLIC gh2gfx_shader_cache)
+    target_link_libraries(gh2gfx_guest_d3d PUBLIC gh2gfx_shader_cache gh2k_hostaddr)
     target_compile_options(gh2gfx_guest_d3d PRIVATE -Wall -Wextra)
     add_executable(gh2_d3d_observer_selftest EXCLUDE_FROM_ALL gfx/guest_d3d/observer_selftest.cpp)
     target_link_libraries(gh2_d3d_observer_selftest PRIVATE gh2gfx_guest_d3d)

@@ -5,11 +5,10 @@
 #include <rex/cvar.h>
 #include <rex/ui/imgui_dialog.h>
 #include <rex/ui/imgui_drawer.h>
-#include <spawn.h>
-#include <poll.h>
-#include <signal.h>
-#include <sys/wait.h>
-#include <unistd.h>
+#include <gh2os/os.h>
+#ifndef _WIN32
+#include <unistd.h>   // access
+#endif
 
 #include <algorithm>
 #include <atomic>
@@ -25,8 +24,6 @@
 #include <string>
 #include <vector>
 
-extern char** environ;
-
 REXCVAR_DEFINE_BOOL(shader_autobuild, true, "GH2",
                     "Make the translated shaders (shaders.pak) from the game when they are missing or from an older version, at start-up, with a progress window (the native renderer needs them)");
 
@@ -36,11 +33,7 @@ namespace fs = std::filesystem;
 
 constexpr uint32_t kPakVersion = 2;   // keep equal to kVersion of native/gfx/shader_cache/shader_cache.cpp
 
-fs::path ExeDir() {
-  std::error_code ec;
-  const fs::path exe = fs::read_symlink("/proc/self/exe", ec);
-  return ec ? fs::path() : exe.parent_path();
-}
+fs::path ExeDir() { return fs::path(gh2os::ExeDir()); }   // (/proc/self/exe | GetModuleFileName)
 
 // native/tools: beside the executable (installed), or where this build was made from.
 fs::path FindToolsDir() {
@@ -61,8 +54,25 @@ fs::path FindToolsDir() {
   return {};
 }
 
-// The Python that runs the shader pipeline: GH2_PYTHON (the AppImage's portable one, set by the installer's launcher), else python3 on the PATH.
-std::string FindPython();
+// The Python that runs the shader pipeline: GH2_PYTHON (the AppImage's portable one, set by the installer's launcher), else python3 on the PATH
+// (Windows: python.exe, or the `py -3` launcher). Returns the command and its leading arguments, empty if there is none.
+std::vector<std::string> FindPython();
+
+#ifdef _WIN32
+constexpr char kPathSeparator = ';';
+#else
+constexpr char kPathSeparator = ':';
+#endif
+
+bool IsExecutableFile(const fs::path& p) {
+  std::error_code ec;
+  if (!fs::is_regular_file(p, ec)) return false;
+#ifdef _WIN32
+  return true;
+#else
+  return access(p.c_str(), X_OK) == 0;
+#endif
+}
 
 bool OnPath(const char* program) {
   const char* path = std::getenv("PATH");
@@ -70,25 +80,33 @@ bool OnPath(const char* program) {
   std::string list = path;
   size_t at = 0;
   while (at <= list.size()) {
-    size_t end = list.find(':', at);
+    size_t end = list.find(kPathSeparator, at);
     if (end == std::string::npos) end = list.size();
-    const fs::path candidate = fs::path(list.substr(at, end - at)) / program;
-    if (!list.substr(at, end - at).empty() && access(candidate.c_str(), X_OK) == 0) return true;
+    const std::string dir = list.substr(at, end - at);
+    if (!dir.empty()) {
+      fs::path candidate = fs::path(dir) / program;
+#ifdef _WIN32
+      candidate += ".exe";
+#endif
+      if (IsExecutableFile(candidate)) return true;
+    }
     at = end + 1;
   }
   return false;
 }
 
-std::string FindPython() {
-  if (const char* e = std::getenv("GH2_PYTHON"); e && *e && access(e, X_OK) == 0) return e;
-  return OnPath("python3") ? "python3" : std::string();
+std::vector<std::string> FindPython() {
+  if (const char* e = std::getenv("GH2_PYTHON"); e && *e && IsExecutableFile(e)) return {e};
+#ifdef _WIN32
+  if (OnPath("python")) return {"python"};
+  if (OnPath("py")) return {"py", "-3"};
+  return {};
+#else
+  return OnPath("python3") ? std::vector<std::string>{"python3"} : std::vector<std::string>{};
+#endif
 }
 
-fs::path DataHome() {
-  if (const char* x = std::getenv("XDG_DATA_HOME"); x && *x) return fs::path(x) / "gh2";
-  const char* h = std::getenv("HOME");
-  return fs::path(h ? h : "") / ".local" / "share" / "gh2";
-}
+fs::path DataHome() { return fs::path(gh2os::DataDir()); }   // $XDG_DATA_HOME/gh2 or ~/.local/share/gh2 | %LOCALAPPDATA%\gh2
 
 
 // ---- the build, in the background ---------------------------------------------------------------------------------------------------------------------------------------------------
@@ -121,9 +139,6 @@ int64_t NowNs() { return std::chrono::duration_cast<std::chrono::nanoseconds>(st
 fs::path FailureMarker() { return DataHome() / "shader_build_failed"; }
 
 void RunBuild(std::vector<std::string> args, fs::path work, std::string dir) {
-  std::vector<char*> argv;
-  for (std::string& a : args) argv.push_back(a.data());
-  argv.push_back(nullptr);
   auto fail = [&](const std::string& why) {
     {
       std::lock_guard<std::mutex> lock(g_build.mutex);
@@ -136,33 +151,21 @@ void RunBuild(std::vector<std::string> args, fs::path work, std::string dir) {
     g_build.end_ns = NowNs();
     g_build.state = 3;
   };
-  int pipefd[2];
-  if (pipe(pipefd) != 0) return fail("cannot make a pipe for the shader pipeline");
-  posix_spawn_file_actions_t actions;
-  posix_spawn_file_actions_init(&actions);
-  posix_spawn_file_actions_adddup2(&actions, pipefd[1], STDOUT_FILENO);
-  posix_spawn_file_actions_adddup2(&actions, pipefd[1], STDERR_FILENO);
-  posix_spawn_file_actions_addclose(&actions, pipefd[0]);
-  // A process group of its own (so that the pipeline can end everything it started when this process goes away: GH2_PARENT_PID, native/tools/shader_pipeline.py). A Ctrl+C in the
-  // terminal therefore no longer reaches it directly: the pipeline notices that its parent is gone within half a second.
-  posix_spawnattr_t attr;
-  posix_spawnattr_init(&attr);
-  posix_spawnattr_setflags(&attr, POSIX_SPAWN_SETPGROUP);
-  posix_spawnattr_setpgroup(&attr, 0);
-  pid_t pid = 0;
-  const int spawned = posix_spawnp(&pid, "env", &actions, &attr, argv.data(), environ);
-  posix_spawnattr_destroy(&attr);
-  posix_spawn_file_actions_destroy(&actions);
-  close(pipefd[1]);
-  if (spawned != 0) {
-    close(pipefd[0]);
-    return fail(std::string("cannot start the shader pipeline: ") + std::strerror(spawned));
-  }
+  // The pipeline runs in a process group / job of its own (so that it can end everything it started when this process goes away: GH2_PARENT_PID, native/tools/shader_pipeline.py).
+  // On POSIX a Ctrl+C in the terminal therefore no longer reaches it directly: the pipeline notices that its parent is gone within half a second. On Windows closing this process closes
+  // the job object and ends the whole tree.
+  gh2os::SpawnOptions spawn;
+  spawn.argv = args;
+  spawn.env_unset = {"LD_LIBRARY_PATH", "LD_PRELOAD"};   // the game's libraries must not reach the portable Python
+  spawn.env_set = {{"GH2_PARENT_PID", std::to_string(gh2os::CurrentProcessId())}};
+  gh2os::Process pipeline;
+  std::string spawn_error;
+  if (!pipeline.Start(spawn, &spawn_error)) return fail("cannot start the shader pipeline: " + spawn_error);
   std::string pending, last_error;
   char buf[2048];
-  ssize_t n;
-  while ((n = read(pipefd[0], buf, sizeof buf)) > 0) {
-    for (ssize_t i = 0; i < n; ++i) {
+  for (int n; (n = pipeline.ReadOutput(buf, sizeof buf, 1000)) >= 0;) {
+    for (int i = 0; i < n; ++i) {
+      if (buf[i] == '\r') continue;   // (Windows line ends)
       if (buf[i] != '\n') {
         pending += buf[i];
         continue;
@@ -182,12 +185,12 @@ void RunBuild(std::vector<std::string> args, fs::path work, std::string dir) {
       pending.clear();
     }
   }
-  close(pipefd[0]);
-  int status = 0;
-  waitpid(pid, &status, 0);
+  int exit_code = -1;
+  std::string how;
+  while (!pipeline.Poll(&exit_code, &how)) std::this_thread::sleep_for(std::chrono::milliseconds(20));
   std::error_code ec;
-  if (!(WIFEXITED(status) && WEXITSTATUS(status) == 0 && fs::exists(work / "cache" / "shaders.pak")))
-    return fail(std::string("the shader pipeline failed (exit ") + (WIFEXITED(status) ? std::to_string(WEXITSTATUS(status)) : std::string("killed by signal ") + std::to_string(WTERMSIG(status)) + " " + strsignal(WTERMSIG(status))) + ")" + (last_error.empty() ? "" : ": " + last_error));
+  if (!(exit_code == 0 && fs::exists(work / "cache" / "shaders.pak")))
+    return fail(std::string("the shader pipeline failed (") + how + ")" + (last_error.empty() ? "" : ": " + last_error));
   fs::create_directories(dir, ec);
   for (const char* name : {"shaders.pak", "manifest.json", "index.tsv"}) {
     const fs::path from = work / "cache" / name, to = fs::path(dir) / name, tmp = fs::path(dir) / (std::string(name) + ".tmp");
@@ -236,7 +239,7 @@ class ShaderBuildDialog final : public rex::ui::ImGuiDialog {
       }
       ImGui::TextWrapped("The graphics could not be prepared, so nothing can be drawn with the new renderer this time.");
       ImGui::TextWrapped("Close the game and start it again: it will use the compatibility renderer. (%s)", why.c_str());
-      ImGui::TextDisabled("To try again later, delete %s", FailureMarker().c_str());
+      ImGui::TextDisabled("To try again later, delete %s", FailureMarker().string().c_str());
     } else {
       double fraction = state == 2 ? 1.0 : 0.0;
       const char* label = state == 2 ? "Ready" : "Starting";
@@ -277,22 +280,30 @@ bool Gh2ShaderBuildBegin(const std::string& dir) {
   const char* off = std::getenv("GH2_SHADER_AUTOBUILD");
   if ((off && std::strcmp(off, "0") == 0) || !REXCVAR_GET(shader_autobuild)) return false;
   std::error_code ec;
-  if (fs::exists(FailureMarker(), ec)) return std::fprintf(stderr, "SHADERS: the last attempt to make shaders.pak failed (%s exists): the compatibility renderer is used\n", FailureMarker().c_str()), false;
+  if (fs::exists(FailureMarker(), ec)) return std::fprintf(stderr, "SHADERS: the last attempt to make shaders.pak failed (%s exists): the compatibility renderer is used\n", FailureMarker().string().c_str()), false;
 
   const fs::path tools = FindToolsDir();
   const fs::path game_root = rex::cvar::GetFlagByName("game_data_root");
   const fs::path gen = game_root / "gen";
   if (tools.empty()) return std::fprintf(stderr, "SHADERS: no shaders.pak in '%s' and the shader tools (native/tools/shader_pipeline.py) were not found: set GH2_NATIVE_TOOLS\n", dir.c_str()), false;
-  if (game_root.empty() || !fs::exists(gen)) return std::fprintf(stderr, "SHADERS: cannot make shaders.pak: the game's folder '%s' has no gen/ (is --game_data_root set?)\n", game_root.c_str()), false;
-  const std::string python = FindPython();
+  if (game_root.empty() || !fs::exists(gen)) return std::fprintf(stderr, "SHADERS: cannot make shaders.pak: the game's folder '%s' has no gen/ (is --game_data_root set?)\n", game_root.string().c_str()), false;
+  const std::vector<std::string> python = FindPython();
   if (python.empty()) return std::fprintf(stderr, "SHADERS: cannot make shaders.pak: python3 is not installed (and GH2_PYTHON is not set)\n"), false;
-  if (!fs::exists(tools.parent_path() / "third_party/build/xenosrecomp/XenosRecomp/XenosRecomp")) return std::fprintf(stderr, "SHADERS: cannot make shaders.pak: the XenosRecomp binary is not built (native/tools/build_xenosrecomp.sh)\n"), false;
+#ifdef _WIN32
+  const char* kXenosRecompBinary = "third_party/build/xenosrecomp/XenosRecomp/XenosRecomp.exe";
+#else
+  const char* kXenosRecompBinary = "third_party/build/xenosrecomp/XenosRecomp/XenosRecomp";
+#endif
+  if (!fs::exists(tools.parent_path() / kXenosRecompBinary)) return std::fprintf(stderr, "SHADERS: cannot make shaders.pak: the XenosRecomp binary is not built (native/tools/build_xenosrecomp.sh)\n"), false;
 
   const fs::path work = DataHome() / "shader_build";
   fs::remove_all(work, ec);
   fs::create_directories(work, ec);
-  std::vector<std::string> args = {"env", "-u", "LD_LIBRARY_PATH", "-u", "LD_PRELOAD", "GH2_PARENT_PID=" + std::to_string(getpid()), python, "-u", (tools / "shader_pipeline.py").string(), "--gen-dir", gen.string(), "--out", work.string(),
-                                   "--stages", "extract,xex,recompile,cache", "--no-build"};   // no `validate`: spirv-val is a developer check, a player may not have it
+  std::vector<std::string> args = python;   // (the child's environment is edited by RunBuild: no LD_LIBRARY_PATH / LD_PRELOAD, GH2_PARENT_PID set)
+  args.push_back("-u");
+  for (const std::string& a : {(tools / "shader_pipeline.py").string(), std::string("--gen-dir"), gen.string(), std::string("--out"), work.string(), std::string("--stages"), std::string("extract,xex,recompile,cache"),
+                              std::string("--no-build")})   // no `validate`: spirv-val is a developer check, a player may not have it
+    args.push_back(a);
   std::fprintf(stderr, "SHADERS: %s: making it from the game in the background (first start, about 15 s)\n", fs::exists(fs::path(dir) / "shaders.pak") ? "shaders.pak is from an older version" : "no shaders.pak");
   {
     std::lock_guard<std::mutex> lock(g_planned_mutex);

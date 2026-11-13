@@ -100,15 +100,20 @@ def stage_xex(a, work, rep):
     print("S.0b xex      : %d containers embedded in the executable (%s)" % (len(found), ", ".join("%08X" % addr for addr, _ in found)))
 
 
+WINDOWS = sys.platform == "win32"
+
+
 def find_xenosrecomp(a):
     if a.xenosrecomp:
         return a.xenosrecomp
-    cand = NATIVE / "third_party/build/xenosrecomp/XenosRecomp/XenosRecomp"
+    cand = NATIVE / ("third_party/build/xenosrecomp/XenosRecomp/XenosRecomp.exe" if WINDOWS else "third_party/build/xenosrecomp/XenosRecomp/XenosRecomp")
     if cand.exists():
         return str(cand)
     if a.no_build:   # run by the game on its first start: building the tool needs the network and a compiler, so say what is missing instead
         print("ERROR: the XenosRecomp binary is not at %s (this run may not build it)" % cand, flush=True)
         sys.exit(3)
+    if WINDOWS:
+        return sh(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(HERE / "build_xenosrecomp.ps1")]).stdout.strip().splitlines()[-1]
     return sh(["sh", str(HERE / "build_xenosrecomp.sh")]).stdout.strip().splitlines()[-1]
 
 
@@ -120,7 +125,10 @@ def stage_recompile(a, work, rep):
     # the shipped binary keeps libdxcompiler.so, {fmt} and the C++ runtime it was built with next to itself: they come first (a binary built on the dev machine finds them by its RUNPATH instead)
     env = dict(os.environ)
     own_libs = os.path.dirname(os.path.abspath(xr))
-    env["LD_LIBRARY_PATH"] = own_libs + (":" + env["LD_LIBRARY_PATH"] if env.get("LD_LIBRARY_PATH") else "")
+    if WINDOWS:   # (Windows looks next to the executable first, but a DLL of the same name elsewhere on PATH must not win over dxcompiler.dll / dxil.dll)
+        env["PATH"] = own_libs + os.pathsep + env.get("PATH", "")
+    else:
+        env["LD_LIBRARY_PATH"] = own_libs + (":" + env["LD_LIBRARY_PATH"] if env.get("LD_LIBRARY_PATH") else "")
     r = sh([xr, str(work / "fx_xbox"), "-", str(common), "--emit", str(emit)], env=env)
     if r.returncode != 0 or not (emit / "index.tsv").exists():
         raise SystemExit("XenosRecomp failed (exit %d): %s" % (r.returncode, (r.stderr or r.stdout)[-400:]))
@@ -176,10 +184,16 @@ def stage_validate(a, work, rep):
                                                                              pct(len(res) - len(bad), len(res)), time.time() - t0))
 
 
+def dxc_version():
+    dxc_bin = NATIVE / "third_party/XenosRecomp/thirdparty/dxc-bin"
+    if WINDOWS:
+        return sh([str(dxc_bin / "bin/x64/dxc.exe"), "--version"]).stdout.strip()
+    return sh(["sh", "-c", "LD_LIBRARY_PATH=%s %s --version" % (dxc_bin / "lib/x64", dxc_bin / "bin/x64/dxc-linux")]).stdout.strip()
+
+
 def stage_cache(a, work, rep):
     prov = {"source": rep.get("extract", {}), "tools": rep.get("recompile", {}).get("tool", {}),
-            "dxc": sh(["sh", "-c", "LD_LIBRARY_PATH=%s %s --version" % (NATIVE / "third_party/XenosRecomp/thirdparty/dxc-bin/lib/x64",
-                                                                       NATIVE / "third_party/XenosRecomp/thirdparty/dxc-bin/bin/x64/dxc-linux")]).stdout.strip(),
+            "dxc": dxc_version(),
             "spirv_val": rep.get("validate", {}).get("tool", ""), "target_env": a.target_env}
     excluded = set(rep.get("validate", {}).get("invalid", {}))
     m = shader_cache_build.build(work / "emit", work / "cache", prov, excluded)
@@ -215,6 +229,15 @@ def die_with_parent():
         return
 
     def watch():
+        if WINDOWS:   # (os.getppid() keeps the creator's id after it is gone: wait on the process itself; the game also puts us in a job object that dies with it)
+            import ctypes
+            SYNCHRONIZE = 0x00100000
+            handle = ctypes.windll.kernel32.OpenProcess(SYNCHRONIZE, False, parent)
+            if not handle:
+                os._exit(1)   # already gone
+            while ctypes.windll.kernel32.WaitForSingleObject(handle, 500) == 0x102:   # WAIT_TIMEOUT
+                pass
+            os._exit(1)
         while True:
             time.sleep(0.5)
             if os.getppid() != parent:

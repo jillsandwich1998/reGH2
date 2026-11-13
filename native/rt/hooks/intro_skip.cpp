@@ -7,6 +7,7 @@
 // screen is dismissed (hooks_input.cpp); the pulses stop when the guest runs at menu speed (hooks_video.cpp) or the intro video
 // handle is closed (hooks_file.cpp).
 #include <gh2rt/host_services.h>
+#include <gh2os/os.h>
 
 #include <chrono>
 #include <cstdio>
@@ -39,8 +40,7 @@ const Settings& Cfg() {
 bool ConfigFileValue(const char* key, std::string* out) {
   static const std::string text = [] {
     std::string path;
-    if (const char* x = getenv("XDG_CONFIG_HOME"); x && *x) path = std::string(x) + "/gh2/config.toml";
-    else if (const char* h = getenv("HOME"); h && *h) path = std::string(h) + "/.config/gh2/config.toml";
+    if (const std::string dir = gh2os::ConfigDir(); !dir.empty()) path = dir + "/config.toml";   // ~/.config/gh2 (XDG) | %APPDATA%\gh2
     std::string t;
     if (FILE* f = path.empty() ? nullptr : fopen(path.c_str(), "r")) {
       char buf[256];

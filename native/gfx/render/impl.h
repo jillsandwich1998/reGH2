@@ -193,9 +193,10 @@ struct Renderer::Impl {
   // ---- pipeline cache on disk and pipelines made ahead of time (pipelines.cpp) ----
   // pipeline_cache.bin is the driver's blob (VkPipelineCache), pipelines.list the descriptions of the pipelines the game has used; a background thread builds the listed ones while the
   // game boots, so that the first draw that needs one finds it ready instead of compiling it in the middle of a frame. The same thread saves both files while the game runs.
-  struct AheadEntry {   // a pipeline the background thread is building or has built
+  struct AheadEntry {   // a pipeline the background thread (or the compile pool) is building or has built
     VkPipeline pipeline = VK_NULL_HANDLE;
     bool done = false;
+    bool by_pool = false;   // asked for by a draw and built by the compile pool (a pipeline nobody had listed yet)
   };
   std::string pipeline_cache_dir;
   std::mutex ahead_mutex;
@@ -211,6 +212,28 @@ struct Renderer::Impl {
   std::atomic<bool> thread_stop{false};
   std::atomic<uint64_t> pipelines_on_demand{0}, on_demand_ns{0}, on_demand_max_ns{0}, pipelines_ahead{0}, ahead_ns{0}, ahead_hits{0}, ahead_wait_ns{0}, pipelines_listed_at_start{0};
   std::atomic<bool> ahead_active{false};
+  // Pipelines nobody listed yet (the first time a scene shows something): a draw does not compile them itself but hands them to a pool of threads, so the
+  // hundreds a new venue asks for in its first frames compile side by side instead of one after the other inside a frame. The draws of a frame wait for
+  // them GH2_PIPELINE_WAIT_MS in all (default 8: half a 60 Hz frame); a draw whose pipeline is not ready by then is skipped for that frame and drawn as soon as it is (a missing
+  // object for a frame or two instead of a frozen picture). GH2_PIPELINE_ASYNC=0: the draw builds the pipeline itself and waits for it, as before.
+  struct CompileJob {
+    std::string key;
+    PipelineDesc desc;
+    std::shared_ptr<AheadEntry> entry;
+  };
+  bool async_pipelines = true;
+  uint64_t wait_budget_ns = 8000000;
+  uint64_t budget_frame = ~0ull, budget_used_ns = 0;   // draw thread: the frame the budget is for, and how much of it the waits used
+  std::vector<std::thread> compile_workers;
+  std::deque<CompileJob> compile_queue;
+  std::mutex compile_mutex;
+  std::condition_variable compile_cv;
+  bool compile_stop = false;
+  std::atomic<uint64_t> pipelines_async{0}, draws_waiting_pipeline{0}, compile_queue_max{0};
+  void StartCompilePool();
+  void StopCompilePool();
+  void CompileWorkerMain();
+  VkPipeline GetPipelineBlocking(const PipelineDesc& desc, const std::string& key);
   std::vector<uint8_t> LoadFile(const std::string& path);
   void SaveFile(const std::string& path, const void* data, size_t size);
   void OpenPipelineCache();       // creates pipeline_cache from the file (device objects)

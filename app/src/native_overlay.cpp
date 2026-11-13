@@ -1,6 +1,7 @@
 #include "native_overlay.h"
 
 #include <gh2rt/render_menu.h>
+#include <gh2os/os.h>
 #include <rex/cvar.h>
 #include <rex/ui/imgui_drawer.h>
 #include <rex/ui/immediate_drawer.h>
@@ -167,8 +168,7 @@ void Gh2ApplyRenderOptions() {
   const gh2render::RenderOptions now = renderer->GetOptions();
   renderer->SetOptions(o);
   {   // for the performance overlay (MangoHud: exec=cat $XDG_RUNTIME_DIR/gh2_render.txt): what the game really renders at, not the size of the window
-    const char* dir = std::getenv("XDG_RUNTIME_DIR");
-    const std::string path = std::string(dir && *dir ? dir : "/tmp") + "/gh2_render.txt";
+    const std::string path = gh2os::RuntimeDir() + "/gh2_render.txt";   // $XDG_RUNTIME_DIR or /tmp | the temp directory
     if (FILE* f = std::fopen(path.c_str(), "w")) {
       std::fprintf(f, "%ux%u MSAA %s\n", (o.height * 16 + 4) / 9, o.height, o.msaa ? "on" : "off");
       std::fclose(f);
@@ -193,8 +193,8 @@ void Gh2NativeScreenshot() {
   renderer->RequestScreenshot([tag](uint32_t width, uint32_t height, std::vector<uint8_t> rgb) {
     std::fprintf(stderr, "SCREENSHOT captured at %.3f s (steady clock)\n", std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count());
     std::thread([width, height, tag, rgb = std::move(rgb)] {   // the renderer's thread must not wait for the disk
-      const char* home = std::getenv("HOME");
-      const std::filesystem::path dir = std::filesystem::path(home && *home ? home : "/tmp") / "gh2_shots";
+      const std::string home = gh2os::HomeDir();
+      const std::filesystem::path dir = std::filesystem::path(!home.empty() ? home : gh2os::RuntimeDir()) / "gh2_shots";
       std::error_code ec;
       std::filesystem::create_directories(dir, ec);
       const std::time_t now = std::time(nullptr);

@@ -1,7 +1,11 @@
 #include "gh2k/sync.h"
 
+#include "gh2k/host_addr.h"
+
 #include <atomic>
 #include <condition_variable>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <mutex>
 #include <thread>
@@ -13,16 +17,16 @@ namespace {
 
 inline uint32_t Be32(const uint8_t* base, uint32_t a) {
   uint32_t v;
-  std::memcpy(&v, base + a, 4);
+  std::memcpy(&v, gh2k::HostAddr(base, a), 4);
   return __builtin_bswap32(v);
 }
 inline void PutBe32(uint8_t* base, uint32_t a, uint32_t v) {
   v = __builtin_bswap32(v);
-  std::memcpy(base + a, &v, 4);
+  std::memcpy(gh2k::HostAddr(base, a), &v, 4);
 }
 // A big endian guest word read and written with atomic semantics (relaxed on its own: the ordering comes from the lock count).
-inline std::atomic<uint32_t>& Word(uint8_t* base, uint32_t a) { return *reinterpret_cast<std::atomic<uint32_t>*>(base + a); }
-inline std::atomic<int32_t>& Count(uint8_t* base, uint32_t a) { return *reinterpret_cast<std::atomic<int32_t>*>(base + a); }
+inline std::atomic<uint32_t>& Word(uint8_t* base, uint32_t a) { return *reinterpret_cast<std::atomic<uint32_t>*>(gh2k::HostAddr(base, a)); }
+inline std::atomic<int32_t>& Count(uint8_t* base, uint32_t a) { return *reinterpret_cast<std::atomic<int32_t>*>(gh2k::HostAddr(base, a)); }
 
 constexpr uint32_t kCsLockCount = 0x10, kCsRecursion = 0x14, kCsOwner = 0x18, kCsSpinByte = 1;
 
@@ -63,12 +67,12 @@ void Wake(uint32_t address) {
 }  // namespace
 
 uint32_t RaiseIrql(uint8_t* base, uint32_t pcr, uint32_t new_irql) {
-  const uint32_t old = base[pcr + kPcrCurrentIrql];
-  base[pcr + kPcrCurrentIrql] = static_cast<uint8_t>(new_irql);
+  const uint32_t old = (*gh2k::HostAddr(base, pcr + kPcrCurrentIrql));
+  (*gh2k::HostAddr(base, pcr + kPcrCurrentIrql)) = static_cast<uint8_t>(new_irql);
   return old;
 }
 
-void LowerIrql(uint8_t* base, uint32_t pcr, uint32_t old_irql) { base[pcr + kPcrCurrentIrql] = static_cast<uint8_t>(old_irql); }
+void LowerIrql(uint8_t* base, uint32_t pcr, uint32_t old_irql) { (*gh2k::HostAddr(base, pcr + kPcrCurrentIrql)) = static_cast<uint8_t>(old_irql); }
 
 void SpinAcquire(uint8_t* base, uint32_t pcr, uint32_t lock) {
   const uint32_t self = __builtin_bswap32(pcr);
@@ -102,11 +106,11 @@ void SpinReleaseLowering(uint8_t* base, uint32_t pcr, uint32_t lock, uint32_t ol
 }
 
 void CritInit(uint8_t* base, uint32_t cs, uint32_t spin_count) {
-  std::memset(base + cs, 0, 0x1C);
-  base[cs] = 1;   // EventSynchronizationObject: the contended path sleeps on it
+  std::memset(gh2k::HostAddr(base, cs), 0, 0x1C);
+  (*gh2k::HostAddr(base, cs)) = 1;   // EventSynchronizationObject: the contended path sleeps on it
   uint32_t div = (spin_count + 255) >> 8;
   if (div > 255) div = 255;
-  base[cs + kCsSpinByte] = static_cast<uint8_t>(div);
+  (*gh2k::HostAddr(base, cs + kCsSpinByte)) = static_cast<uint8_t>(div);
   Count(base, cs + kCsLockCount).store(-1, std::memory_order_relaxed);
 }
 
@@ -118,7 +122,7 @@ void CritEnter(uint8_t* base, uint32_t pcr, uint32_t cs) {
     PutBe32(base, cs + kCsRecursion, Be32(base, cs + kCsRecursion) + 1);
     return;
   }
-  for (uint32_t spins = base[cs + kCsSpinByte] * 256u; spins > 0; --spins) {
+  for (uint32_t spins = (*gh2k::HostAddr(base, cs + kCsSpinByte)) * 256u; spins > 0; --spins) {
     int32_t expected = -1;
     if (count.compare_exchange_weak(expected, 0, std::memory_order_acquire, std::memory_order_relaxed)) {
       SetOwner(base, cs, me);
@@ -128,6 +132,10 @@ void CritEnter(uint8_t* base, uint32_t pcr, uint32_t cs) {
   }
   if (count.fetch_add(1, std::memory_order_acquire) != -1) {   // somebody holds it: sleep until a Leave hands it over
     ++g_contended;
+    static const bool debug = std::getenv("GH2_SYNC_DEBUG") != nullptr;
+    if (debug)   // GH2_SYNC_DEBUG=1: which section a thread goes to sleep on, who holds it
+      std::fprintf(stderr, "SYNC park: thread %08X sleeps on critical section %08X held by thread %08X (lock count now %d, recursion %u)\n", me, cs, OwnerOf(base, cs),
+                   count.load(std::memory_order_relaxed), Be32(base, cs + kCsRecursion));
     Park(cs);
   }
   SetOwner(base, cs, me);

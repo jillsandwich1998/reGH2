@@ -1,0 +1,13 @@
+reGH2 - an unofficial native PC port of Guitar Hero II (Xbox 360), drawn with Vulkan.
+
+THE GAME IS NOT INCLUDED. You need your own copy of Guitar Hero II for the Xbox 360: the disc image (.iso), the extracted files, or the folder with default.xex. After Setup, open reGH2, point it at that copy and press Install: the game's code is rebuilt from your files on this computer (a minute or two). Nothing of the game is downloaded or bundled.
+
+What you need on this PC:
+  - Windows 10 (1809) or 11, 64-bit, with a graphics card and a current driver that supports Vulkan.
+  - About 1 GB of free disk space for the program and the build, plus your game files.
+
+Everything that builds the game comes with this Setup: nothing is downloaded and no other program (no Visual Studio tools) has to be installed.
+
+This program installs for your user only (no administrator rights). Your saves are kept in %LOCALAPPDATA%\gh2 and are asked about, never silently deleted, when you uninstall.
+
+This is a pre-release; see the project page for what has been tested.

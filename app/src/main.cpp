@@ -1,6 +1,8 @@
 // gh2 - ReXGlue Recompiled Project
 
-#include "generated/default/gh2_init.h"
+#ifndef GH2_GAME_MODULE
+#include "generated/default/gh2_init.h"   // the game code is linked in (GH2_GAME_MODULE=OFF); otherwise it comes from gh2game.dll
+#endif
 
 #include "gh2_app.h"
 

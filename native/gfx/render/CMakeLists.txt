@@ -1,7 +1,7 @@
 # gh2render: the native renderer (Phase 3): a gh2gpu::Sink that draws with Vulkan (gh2vk) and the translated shaders of the shader cache. Plain C++17: no SDK.
 add_library(gh2render STATIC renderer.cpp device.cpp targets.cpp textures.cpp draw.cpp pipelines.cpp overlay.cpp formats.cpp tex_hash.cpp tex_hash_avx2.cpp)
 target_include_directories(gh2render PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include" PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
-target_link_libraries(gh2render PUBLIC gh2gpu gh2vk gh2gfx_guest_d3d)
+target_link_libraries(gh2render PUBLIC gh2gpu gh2vk gh2gfx_guest_d3d gh2os)
 target_compile_options(gh2render PRIVATE -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers)
 set_target_properties(gh2render PROPERTIES POSITION_INDEPENDENT_CODE ON)
 # the AVX2 build of the texture hash (xxHash header, the same copy the shader cache uses); only this file is compiled for AVX2, the rest runs on any x86-64

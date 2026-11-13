@@ -12,6 +12,7 @@ bool Gh2AudioQueueIsAuto();   // graphics_menu.cpp
 #include "native_window.h"
 
 #include <rex/chrono/clock.h>
+#include <gh2os/os.h>
 #include <rex/cvar.h>
 #include <rex/input/input_system.h>
 #include <rex/runtime.h>
@@ -81,18 +82,15 @@ REXCVAR_DEFINE_INT32(autostart_seconds, 30, "GH2", "How long the autostart testi
 
 // SDL installs SIGINT/SIGTERM handlers that only post an SDL_QUIT event, which this windowed app never reads, so `kill` and Ctrl+C
 // did nothing. Ask SDL not to install them (must be set before SDL initialises).
-__attribute__((constructor)) static void Gh2DisableSdlSignalHandlers() { setenv("SDL_NO_SIGNAL_HANDLERS", "1", 0); }
+__attribute__((constructor)) static void Gh2DisableSdlSignalHandlers() { gh2os::SetEnv("SDL_NO_SIGNAL_HANDLERS", "1", false); }
 
 // Where shaders.pak is looked for: GH2_SHADER_CACHE, the shader_cache option, then <data home>/gh2/shaders (what the installer writes).
 std::string Gh2ShaderCacheDir() {
   if (const char* e = std::getenv("GH2_SHADER_CACHE"); e && *e) return e;
   std::string dir = REXCVAR_GET(shader_cache);
   if (!dir.empty()) return dir;
-  const char* xdg = std::getenv("XDG_DATA_HOME");
-  const char* home = std::getenv("HOME");
-  if (xdg && *xdg) return std::string(xdg) + "/gh2/shaders";
-  if (home && *home) return std::string(home) + "/.local/share/gh2/shaders";
-  return {};
+  const std::string data = gh2os::DataDir();   // $XDG_DATA_HOME/gh2 or ~/.local/share/gh2 | %LOCALAPPDATA%\gh2
+  return data.empty() ? std::string() : data + "/shaders";
 }
 
 // The native GPU needs the translated shaders: without them the window would stay black, so the SDK's graphics system is used instead (and says why).

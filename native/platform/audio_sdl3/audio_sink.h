@@ -48,6 +48,11 @@ class AudioSink {
     uint32_t queue_frames_max = 0; // the ring is sized for this many queued frames so that SetQueueFrames can raise the queue while it plays (0 = queue_frames)
     uint32_t device_frames = 512;  // SDL device period in samples (SDL_HINT_AUDIO_DEVICE_SAMPLE_FRAMES); 0 = SDL's default
     bool software_clock = false;   // no SDL device: a thread consumes one frame every 5.33 ms
+    // Device mode: when no output device can be opened (none plugged in, or only a monitor's that sleeps), Open() still succeeds: the software clock
+    // consumes the frames (silent, at the real rate) and a device is looked for every 2 s; the first one that opens takes over, with no restart.
+    // (Once a device stream is open, SDL itself keeps it going: a lost device keeps consuming silently and the stream follows the new default.)
+    bool clock_until_device = false;
+    uint32_t pretend_no_device_ms = 0;  // testing aid: behave as if there were no device for this long after Open()
     bool mute = false;             // consume and discard
     const std::atomic<bool>* external_mute = nullptr;  // also mute while this flag is set (the owner's option; must outlive the sink)
     float gain = 1.0f;
@@ -90,6 +95,7 @@ class AudioSink {
   void SetGain(float gain) noexcept { gain_.store(gain, std::memory_order_relaxed); }
   void SetMute(bool mute) noexcept { mute_.store(mute, std::memory_order_relaxed); }
   SinkStats Stats() const noexcept;
+  bool UsingDevice() const noexcept;   // false while the software clock consumes (clock mode, or no device yet)
   // queued frames + the device's own buffer, in ms (device mode)
   double LatencyMs() const noexcept;
   uint32_t device_period_frames() const { return device_period_frames_; }

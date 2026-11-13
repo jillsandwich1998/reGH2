@@ -7,22 +7,24 @@
 #include <mutex>
 #include <unordered_set>
 
+#include "gh2k/host_addr.h"
+
 namespace gh2k::sync {
 
 namespace {
 
 inline int32_t State(const uint8_t* base, uint32_t o) {
   uint32_t v;
-  std::memcpy(&v, base + o + 4, 4);
+  std::memcpy(&v, gh2k::HostAddr(base, o + 4), 4);
   return static_cast<int32_t>(__builtin_bswap32(v));
 }
 inline void SetState(uint8_t* base, uint32_t o, int32_t s) {
   const uint32_t v = __builtin_bswap32(static_cast<uint32_t>(s));
-  std::memcpy(base + o + 4, &v, 4);
+  std::memcpy(gh2k::HostAddr(base, o + 4), &v, 4);
 }
 inline int32_t Limit(const uint8_t* base, uint32_t o) {
   uint32_t v;
-  std::memcpy(&v, base + o + 0x10, 4);
+  std::memcpy(&v, gh2k::HostAddr(base, o + 0x10), 4);
   return static_cast<int32_t>(__builtin_bswap32(v));
 }
 
@@ -31,12 +33,12 @@ std::mutex& g_lock = *new std::mutex;
 std::condition_variable& g_changed = *new std::condition_variable;
 std::atomic<uint64_t> g_sets{0}, g_resets{0}, g_releases{0}, g_waits{0}, g_blocked{0}, g_timeouts{0}, g_multi{0};
 
-bool Satisfied(const uint8_t* base, uint32_t o) { return State(base, o) > 0 || (base[o] != kTypeSemaphore && State(base, o) != 0); }
+bool Satisfied(const uint8_t* base, uint32_t o) { return State(base, o) > 0 || ((*gh2k::HostAddr(base, o)) != kTypeSemaphore && State(base, o) != 0); }
 
 // The wait is over for this object: take what it gives (a synchronization event clears, a semaphore loses one)
 void Consume(uint8_t* base, uint32_t o) {
-  if (base[o] == kTypeSynchronizationEvent) SetState(base, o, 0);
-  else if (base[o] == kTypeSemaphore) SetState(base, o, State(base, o) - 1);
+  if ((*gh2k::HostAddr(base, o)) == kTypeSynchronizationEvent) SetState(base, o, 0);
+  else if ((*gh2k::HostAddr(base, o)) == kTypeSemaphore) SetState(base, o, State(base, o) - 1);
 }
 
 std::mutex& g_threads_lock = *new std::mutex;
@@ -56,7 +58,7 @@ void ThreadUnregister(uint32_t kthread) {
   std::lock_guard<std::mutex> lock(g_threads_lock);
   g_threads.erase(kthread);
 }
-bool IsNative(const uint8_t* base, uint32_t object) { return IsNativeType(base[object]) || (base[object] == kTypeThread && IsRegisteredThread(object)); }
+bool IsNative(const uint8_t* base, uint32_t object) { return IsNativeType((*gh2k::HostAddr(base, object))) || ((*gh2k::HostAddr(base, object)) == kTypeThread && IsRegisteredThread(object)); }
 void ThreadExited(uint8_t* base, uint32_t kthread) {
   {
     std::lock_guard<std::mutex> lock(g_lock);
@@ -67,20 +69,20 @@ void ThreadExited(uint8_t* base, uint32_t kthread) {
 
 void InitEvent(uint8_t* base, uint32_t event, uint8_t type, bool signalled) {
   std::lock_guard<std::mutex> lock(g_lock);
-  std::memset(base + event, 0, 0x10);
-  base[event] = type;
-  base[event + 2] = 4;   // size in dwords
+  std::memset(gh2k::HostAddr(base, event), 0, 0x10);
+  (*gh2k::HostAddr(base, event)) = type;
+  (*gh2k::HostAddr(base, event + 2)) = 4;   // size in dwords
   SetState(base, event, signalled ? 1 : 0);
 }
 
 void InitSemaphore(uint8_t* base, uint32_t sem, int32_t count, int32_t limit) {
   std::lock_guard<std::mutex> lock(g_lock);
-  std::memset(base + sem, 0, 0x14);
-  base[sem] = kTypeSemaphore;
-  base[sem + 2] = 5;
+  std::memset(gh2k::HostAddr(base, sem), 0, 0x14);
+  (*gh2k::HostAddr(base, sem)) = kTypeSemaphore;
+  (*gh2k::HostAddr(base, sem + 2)) = 5;
   SetState(base, sem, count);
   const uint32_t v = __builtin_bswap32(static_cast<uint32_t>(limit));
-  std::memcpy(base + sem + 0x10, &v, 4);
+  std::memcpy(gh2k::HostAddr(base, sem + 0x10), &v, 4);
 }
 
 int32_t EventSet(uint8_t* base, uint32_t event) {
@@ -163,7 +165,7 @@ uint32_t Wait(uint8_t* base, const uint32_t* objects, uint32_t count, bool wait_
 uint64_t TimeoutFromGuest(const uint8_t* base, uint32_t timeout_ptr) {
   if (!timeout_ptr) return kInfinite;
   uint64_t v;
-  std::memcpy(&v, base + timeout_ptr, 8);
+  std::memcpy(&v, gh2k::HostAddr(base, timeout_ptr), 8);
   const int64_t t = static_cast<int64_t>(__builtin_bswap64(v));
   if (t == 0) return 0;
   if (t < 0) return static_cast<uint64_t>(-t);

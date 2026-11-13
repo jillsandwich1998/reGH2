@@ -1,10 +1,17 @@
 // Boundary tracer core (see gh2rt/boundary_trace.h). No SDK dependency.
 #include <gh2rt/boundary_trace.h>
 
+#include <gh2os/os.h>
+
 #include <fcntl.h>
-#include <sys/syscall.h>
-#include <time.h>
+#ifdef _WIN32
+#include <io.h>
+#include <process.h>
+#define GH2_OPEN_EXTRA _O_BINARY   // (the events are binary records: no newline translation)
+#else
 #include <unistd.h>
+#define GH2_OPEN_EXTRA O_CLOEXEC
+#endif
 
 #include <atomic>
 #include <chrono>
@@ -66,21 +73,19 @@ State& S() {
   return s;
 }
 
-uint64_t NowNs() {
-  timespec ts;
-  clock_gettime(CLOCK_MONOTONIC, &ts);
-  return static_cast<uint64_t>(ts.tv_sec) * 1000000000ull + static_cast<uint64_t>(ts.tv_nsec);
+uint64_t NowNs() {   // (steady_clock is CLOCK_MONOTONIC on Linux, QueryPerformanceCounter on Windows)
+  return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch()).count());
 }
 
 uint32_t ThreadId() {
-  thread_local const uint32_t tid = static_cast<uint32_t>(syscall(SYS_gettid));
+  thread_local const uint32_t tid = gh2os::CurrentThreadId();
   return tid;
 }
 
 void WriteAll(int fd, const void* data, size_t n) {
   const char* p = static_cast<const char*>(data);
   while (n) {
-    const ssize_t w = write(fd, p, n);
+    const auto w = write(fd, p, static_cast<decltype(+n)>(n));
     if (w <= 0) return;
     p += w;
     n -= static_cast<size_t>(w);
@@ -88,6 +93,10 @@ void WriteAll(int fd, const void* data, size_t n) {
 }
 
 std::string ReadComm(uint32_t tid) {
+#ifdef _WIN32
+  (void)tid;   // no per-thread comm file: the thread names show in the debugger / profiler instead
+  return {};
+#else
   char path[64], comm[32] = {};
   snprintf(path, sizeof(path), "/proc/self/task/%u/comm", tid);
   if (FILE* f = fopen(path, "r")) {
@@ -98,6 +107,7 @@ std::string ReadComm(uint32_t tid) {
   std::string s(comm);
   while (!s.empty() && (s.back() == '\n' || s.back() == '\r')) s.pop_back();
   return s;
+#endif
 }
 
 std::string JsonEscape(const std::string& s) {
@@ -191,7 +201,7 @@ __attribute__((constructor(101))) void Init() {
   s.names.push_back(kPseudoMmioStore);
   s.names.push_back(kPseudoResolveIndirect);
   s.path = path;
-  s.fd = open(path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
+  s.fd = open(path, O_WRONLY | O_CREAT | O_TRUNC | GH2_OPEN_EXTRA, 0644);
   if (s.fd < 0) {
     perror("GH2_BOUNDARY_TRACE: open");
     return;
@@ -202,15 +212,9 @@ __attribute__((constructor(101))) void Init() {
   s.t0_ns = NowNs();
   s.buffer.reserve(1u << 14);
 
-  std::string argv;
-  if (FILE* f = fopen("/proc/self/cmdline", "r")) {
-    char buf[4096];
-    const size_t n = fread(buf, 1, sizeof(buf) - 1, f);
-    fclose(f);
-    for (size_t i = 0; i < n; ++i) argv += buf[i] ? buf[i] : ' ';
-  }
+  const std::string argv = gh2os::CommandLine();
   std::string meta = "{\"version\":1,\"event_size\":48,\"full\":" + std::to_string(s.full) + ",\"sample\":" +
-                     std::to_string(s.sample) + ",\"pid\":" + std::to_string(getpid()) + ",\"argv\":\"" + JsonEscape(argv) +
+                     std::to_string(s.sample) + ",\"pid\":" + std::to_string(static_cast<long>(getpid())) + ",\"argv\":\"" + JsonEscape(argv) +
                      "\",\"imports\":[";
   for (size_t i = 0; i < s.names.size(); ++i) meta += std::string(i ? "," : "") + "\"" + JsonEscape(s.names[i]) + "\"";
   meta += "]}\n";

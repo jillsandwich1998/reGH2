@@ -1,5 +1,6 @@
 // Chooses what draws for --gpu=native: the Vulkan renderer when a window is available (GH2_GPU_RENDERER=null forces the counting null sink), and feeds it what only the game's D3D library
 // knows (which microcode is which shader container) through the D3D hooks' observer.
+#include "gh2k/host_addr.h"
 #include "gpu_renderer.h"
 
 #include <gh2gfx/guest_d3d.h>
@@ -34,7 +35,7 @@ class NullSink final : public gh2gpu::Sink {
 
 uint32_t Be32(const uint8_t* b, uint32_t a) {
   uint32_t v;
-  std::memcpy(&v, b + a, 4);
+  std::memcpy(&v, gh2k::HostAddr(b, a), 4);
   return __builtin_bswap32(v);
 }
 
@@ -46,8 +47,8 @@ class RendererObserver final : public gh2gfx::d3d::Observer {
     if (!object) return;
     size_t size = 0;
     gh2gfx::ShaderStage parsed;
-    if (!gh2gfx::ShaderCache::ParseContainerHeader(base + container, 1 << 20, &size, &parsed)) return;
-    const uint64_t hash = gh2gfx::ShaderCache::HashContainer(base + container, size);
+    if (!gh2gfx::ShaderCache::ParseContainerHeader(gh2k::HostAddr(base, container), 1 << 20, &size, &parsed)) return;
+    const uint64_t hash = gh2gfx::ShaderCache::HashContainer(gh2k::HostAddr(base, container), size);
     const bool vertex = stage == gh2gfx::d3d::Stage::kVertex;
     // IM_LOAD carries the object's microcode pointer plus the offset of the microcode inside the container's physical part (0 for the vertex shaders seen, 0x40 for pixel ones)
     const uint32_t shader_offset = Be32(base, container + gh2gfx::d3d::container::kShaderOffset);
@@ -137,7 +138,9 @@ std::unique_ptr<gh2gpu::Sink> CreateSink(const gh2gpu::GuestMemory& memory) {
   }
   gh2render::Config config;
   config.memory = memory;
-  config.window.kind = window.kind == gh2rt::NativeWindow::Kind::kWayland ? gh2vk::WindowInfo::Kind::kWayland : gh2vk::WindowInfo::Kind::kXlib;
+  config.window.kind = window.kind == gh2rt::NativeWindow::Kind::kWin32     ? gh2vk::WindowInfo::Kind::kWin32
+                       : window.kind == gh2rt::NativeWindow::Kind::kWayland ? gh2vk::WindowInfo::Kind::kWayland
+                                                                            : gh2vk::WindowInfo::Kind::kXlib;
   config.window.display = window.display;
   config.window.surface = window.surface;
   config.window.width = window.width;

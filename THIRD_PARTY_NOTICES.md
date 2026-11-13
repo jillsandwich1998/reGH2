@@ -30,6 +30,16 @@ This project contains no game data and no code generated from the game. It build
 The AppImage additionally bundles clang/LLVM 20 (Apache-2.0 with LLVM exceptions), CMake (BSD-3-Clause), Ninja (Apache-2.0),
 glibc / libstdc++ runtime headers and libraries (LGPL / GPL with runtime exception) and a portable CPython with Tk (PSF license).
 
+The Windows installer (`Setup.exe`, `packaging/windows/`) bundles, for the same purpose (compiling the player's own copy of the game on the player's machine):
+a pruned **llvm-mingw** 20261104 (UCRT, x86_64 only), which compiles the game module `gh2game.dll`: clang, lld, libc++, libunwind and compiler-rt's builtins
+(Apache-2.0 with LLVM exceptions) and the **mingw-w64** headers and import libraries (ZPL 2.1, public domain and the other permissive terms listed in its `COPYING`
+files; llvm-mingw's own scripts are ISC), **Ninja** (Apache-2.0), a portable **CPython with Tk** (python-build-standalone, PSF license), the code generator and runtime DLLs
+of the patched ReXGlue SDK built for Windows with the header-only **simde** (MIT), the game's host prebuilt from this repository (`gh2.exe`: our runtime, hooks and renderer,
+with SDL3, zlib and the other components it statically contains, as listed above; nothing derived from the game: the hooks only name game functions by address), a built
+copy of the patched XenosRecomp with the DirectXShaderCompiler DLLs (as above) and the Visual C++ runtime DLLs (`msvcp140*.dll`, `vcruntime140*.dll`, redistributed app-local
+under Microsoft's Visual Studio redistribution terms). The licence texts are in the `licenses` folder of the installed program. Nothing is downloaded while installing and
+no Microsoft build tool is needed: the game module links libc++ and the mingw-w64 libraries statically and depends only on Windows' own Universal C Runtime.
+
 Sources of the bundled system components (glibc, libstdc++, libgcc, X11 and Wayland client libraries) are the Ubuntu 22.04
 packages of the same names (`apt source <package>`); LLVM, CMake, Ninja and CPython are available from their upstream projects.
 

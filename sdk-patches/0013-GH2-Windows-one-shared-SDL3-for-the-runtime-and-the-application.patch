@@ -1,0 +1,22 @@
+diff --git a/thirdparty/CMakeLists.txt b/thirdparty/CMakeLists.txt
+index f102b56..2867b01 100644
+--- a/thirdparty/CMakeLists.txt
++++ b/thirdparty/CMakeLists.txt
+@@ -245,8 +245,15 @@ target_compile_options(imgui PRIVATE -w)
+ # SDL3 - Cross-platform media layer
+ #=============================================================================
+ set(SDL_INSTALL ON CACHE BOOL "" FORCE)
+-set(SDL_SHARED OFF CACHE BOOL "" FORCE)
+-set(SDL_STATIC ON CACHE BOOL "" FORCE)
++if(WIN32)
++    # GH2: one SDL3 for the runtime and the application. A static SDL3 inside rexruntime.dll is not exported, so the application would link a second copy
++    # that cannot see the runtime's windows, devices or audio streams (on Linux librexruntime.so exports it). A shared SDL3.dll is the single instance.
++    set(SDL_SHARED ON CACHE BOOL "" FORCE)
++    set(SDL_STATIC OFF CACHE BOOL "" FORCE)
++else()
++    set(SDL_SHARED OFF CACHE BOOL "" FORCE)
++    set(SDL_STATIC ON CACHE BOOL "" FORCE)
++endif()
+ set(SDL_TEST OFF CACHE BOOL "" FORCE)
+ set(SDL_UNIX_CONSOLE_BUILD ON CACHE BOOL "" FORCE)
+ 

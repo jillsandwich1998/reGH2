@@ -155,7 +155,7 @@ TargetImage* Renderer::Impl::GetResolved(uint32_t virtual_base, bool depth, VkFo
   // a resolve may cover only part of the texture (a tile, a mip level) and the rest must read as zeros, not as whatever the memory held
   EndRendering();
   Transition(*t, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-  const VkImageSubresourceRange clear_range = {depth ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+  const VkImageSubresourceRange clear_range = {static_cast<VkImageAspectFlags>(depth ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT), 0, 1, 0, 1};
   if (depth) {
     const VkClearDepthStencilValue zero_depth = {0.f, 0};
     vkCmdClearDepthStencilImage(cmd, t->image.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &zero_depth, 1, &clear_range);

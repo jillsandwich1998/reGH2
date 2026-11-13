@@ -1,0 +1,16 @@
+# gh2os: the OS services behind one API (threads, futex-like word, well-known directories, process stats, child processes). Plain C++17; os_posix.cpp or os_win32.cpp.
+if(WIN32)
+    add_library(gh2os STATIC os_win32.cpp)
+    target_compile_definitions(gh2os PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN UNICODE _UNICODE)
+    # WaitOnAddress lives in the API-set library "synchronization"; psapi for the working set; shell32 for ShellExecute; ole32 for the known folders
+    target_link_libraries(gh2os PUBLIC synchronization psapi shell32 ole32)
+else()
+    add_library(gh2os STATIC os_posix.cpp)
+    find_package(Threads REQUIRED)
+    target_link_libraries(gh2os PUBLIC Threads::Threads)
+endif()
+target_include_directories(gh2os PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
+target_compile_options(gh2os PRIVATE -Wall -Wextra)
+set_target_properties(gh2os PROPERTIES POSITION_INDEPENDENT_CODE ON)
+add_executable(gh2_os_selftest EXCLUDE_FROM_ALL os_selftest.cpp)
+target_link_libraries(gh2_os_selftest PRIVATE gh2os)

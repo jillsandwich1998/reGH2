@@ -167,7 +167,11 @@ void ShaderCache::ReportUnknown(uint64_t hash, ShaderStage stage, const void* co
   char when[32];
   const std::time_t t = std::time(nullptr);
   std::tm tm{};
+#ifdef _WIN32
+  gmtime_s(&tm, &t);
+#else
   gmtime_r(&t, &tm);
+#endif
   std::strftime(when, sizeof(when), "%Y-%m-%dT%H:%M:%SZ", &tm);
   char line[512];
   std::snprintf(line, sizeof(line), "%s %016llX %s %zu %s\n", when, static_cast<unsigned long long>(hash),

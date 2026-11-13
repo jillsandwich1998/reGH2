@@ -1,0 +1,28 @@
+diff --git a/include/rex/system/xthread.h b/include/rex/system/xthread.h
+index a72911e..a9c7f4d 100644
+--- a/include/rex/system/xthread.h
++++ b/include/rex/system/xthread.h
+@@ -452,4 +452,8 @@ class XHostThread : public XThread {
+   std::function<int()> host_fn_;
+ };
+ 
++// GH2: a host thread of the application borrows the identity of a runtime thread for the imports still answered by the runtime. The pointer lives in a thread_local of
++// the runtime library, which a Windows DLL cannot export as data: these functions are the way in.
++void SetCurrentXThreadForHost(XThread* thread);
++
+ }  // namespace rex::system
+diff --git a/src/system/xthread.cpp b/src/system/xthread.cpp
+index 77bce25..2fa9d18 100644
+--- a/src/system/xthread.cpp
++++ b/src/system/xthread.cpp
+@@ -111,6 +111,10 @@ XThread::~XThread() {
+ 
+ thread_local XThread* current_xthread_tls_ = nullptr;
+ 
++void SetCurrentXThreadForHost(XThread* thread) {
++  current_xthread_tls_ = thread;
++}
++
+ namespace {
+ 
+ XThread* GetBoundCurrentXThread() {

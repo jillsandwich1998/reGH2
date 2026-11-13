@@ -528,11 +528,16 @@ std::string Renderer::StatsLine() const {
     line += m;
     std::snprintf(m, sizeof m, "\n    clears replayed on the same EDRAM base at another sample count: %llu; clears skipped because the image already held that value: %llu; passes reopened for a pending clear: %llu; snapshot mip chains made: %llu; draws asking for alpha-to-mask: %llu", (unsigned long long)impl_->clear_replays.load(), (unsigned long long)impl_->clears_skipped.load(), (unsigned long long)impl_->clears_reopened.load(), (unsigned long long)impl_->snapshot_mips_made.load(), (unsigned long long)impl_->alpha_to_mask_draws.load());
     line += m;
-    char p[320];
-    std::snprintf(p, sizeof p, "\n    pipelines: %llu listed at start; %llu built ahead of time (%.0f ms of work), %llu of them used (waited %.1f ms in all); %llu built by a draw (%.0f ms in all, longest %.1f ms)",
+    char p[512];
+    std::snprintf(p, sizeof p, "\n    pipelines: %llu listed at start; %llu built ahead of time (%.0f ms of work), %llu of them used (waited %.1f ms in all); %llu built on demand (%.0f ms in all, longest %.1f ms)",
                   (unsigned long long)impl_->pipelines_listed_at_start.load(), (unsigned long long)impl_->pipelines_ahead.load(), impl_->ahead_ns.load() / 1e6, (unsigned long long)impl_->ahead_hits.load(),
                   impl_->ahead_wait_ns.load() / 1e6, (unsigned long long)impl_->pipelines_on_demand.load(), impl_->on_demand_ns.load() / 1e6, impl_->on_demand_max_ns.load() / 1e6);
     line += p;
+    if (!impl_->compile_workers.empty()) {
+      std::snprintf(p, sizeof p, "; compile pool: %llu used by draws, draws that went without their pipeline for a frame: %llu, longest queue %llu",
+                    (unsigned long long)impl_->pipelines_async.load(), (unsigned long long)impl_->draws_waiting_pipeline.load(), (unsigned long long)impl_->compile_queue_max.load());
+      line += p;
+    }
     std::snprintf(p, sizeof p, "\n    textures: %.0f ms re-hashing what the draws use (every frame), %.0f ms decoding %.0f MB of changed ones", impl_->tex_hash_ns.load() / 1e6, impl_->tex_decode_ns.load() / 1e6,
                   impl_->tex_decode_bytes.load() / 1048576.0);
     line += p;

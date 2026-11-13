@@ -7,8 +7,7 @@
 #include <gh2rt/hooks_api.h>
 
 #include <immintrin.h>
-#include <sched.h>
-#include <time.h>
+#include <gh2os/os.h>
 
 #include <atomic>
 #include <bit>
@@ -66,12 +65,11 @@ extern "C" void gh2_spin_hint() {
   last = now;
   _mm_pause();
   if (sleep_ns > 0 && ++spins > sleep_after) {
-    timespec ts{0, sleep_ns};
-    nanosleep(&ts, nullptr);
+    gh2os::SleepNs(sleep_ns);
     last = __rdtsc();
     return;
   }
-  if (yield_on && (++n & 63u) == 0) sched_yield();
+  if (yield_on && (++n & 63u) == 0) gh2os::YieldThread();
 }
 
 // ---- Content (DLC) usage tracking for the options menu -------------------------------------------------------------------------
