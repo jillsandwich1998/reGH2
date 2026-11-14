@@ -123,6 +123,7 @@ void SetPresentCallback(std::function<void(uint32_t, uint32_t)> callback) {
 }
 
 gh2render::Renderer* ActiveRenderer() { return g_renderer_owner.get(); }
+void AdoptOverlayRenderer(std::unique_ptr<gh2render::Renderer> renderer) { g_renderer_owner = std::move(renderer); }
 
 std::string RendererStatsLine() { return g_renderer_owner ? g_renderer_owner->StatsLine() : std::string(); }
 

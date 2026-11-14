@@ -64,6 +64,7 @@ struct Config {
   std::string trace_path;                     // GH2_GPU_TRACE: one text line per draw/resolve/clear/swap of the first frames
   uint32_t trace_frames = 0;
   std::function<void(uint32_t width, uint32_t height)> on_present;   // after every swap, on the command processor's thread: the window's size in pixels (the application schedules its menu's frame)
+  bool overlay_only = false;                  // the launcher: no guest, no shader cache; PresentOverlay() shows the application's draw lists alone
   uint32_t render_height = 720;               // internal resolution: the height of every render target (the game's 1280x720 frame, scaled by render_height / 720; width = 16:9). 720 = the console's own image
 };
 
@@ -97,6 +98,8 @@ class Renderer : public gh2gpu::Sink {
   uint32_t OverlayCreateTexture(uint32_t width, uint32_t height, bool linear, const uint8_t* rgba);
   void OverlayDestroyTexture(uint32_t id);
   void OverlaySubmit(std::shared_ptr<const OverlayFrame> frame);
+  // Overlay-only mode (Config::overlay_only): presents a frame with the latest overlay over black. Any one thread; false when Vulkan is not usable.
+  bool PresentOverlay();
   // Asks for the next presented picture, as the game drew it (internal resolution, without the menu): 8-bit RGB, rows top to bottom. `done` runs on the renderer's thread.
   void RequestScreenshot(std::function<void(uint32_t width, uint32_t height, std::vector<uint8_t> rgb)> done);
   // The shader cache was made while the game runs (the application's first-start build): open it from `dir` at the next frame. Any thread.

@@ -34,7 +34,13 @@ typedef void Gh2PPCFunc(struct PPCContext* ctx, uint8_t* base);
 
 #define GH2GAME_ABI_VERSION 1u
 #define GH2GAME_OPEN_SYMBOL "gh2game_open"
+#ifdef _WIN32
 #define GH2GAME_MODULE_FILE "gh2game.dll"
+#define GH2GAME_EXPORT __declspec(dllexport)
+#else
+#define GH2GAME_MODULE_FILE "libgh2game.so"   // next to the executable (Linux: built with the bundled clang, -fvisibility=hidden)
+#define GH2GAME_EXPORT __attribute__((visibility("default")))
+#endif
 
 typedef struct Gh2HostTable {
   uint32_t abi_version;          // GH2GAME_ABI_VERSION

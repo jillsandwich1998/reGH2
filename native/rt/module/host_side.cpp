@@ -14,6 +14,7 @@
 #include <windows.h>
 #else
 #include <dlfcn.h>
+#include <unistd.h>
 #endif
 
 // generated (gh2host_stubs.gen.cpp, native/tools/gen_module_stubs.py)
@@ -74,7 +75,16 @@ Gh2GameOpenFunc LoadModule(std::string* where) {
 #else
 Gh2GameOpenFunc LoadModule(std::string* where) {
   const char* env = std::getenv("GH2_GAME_MODULE");
-  *where = env && *env ? env : "./libgh2game.so";
+  if (env && *env) {
+    *where = env;
+  } else {   // next to the executable, wherever it is started from (the menu shortcut's working directory is not the app's)
+    char exe[4096];
+    const ssize_t len = readlink("/proc/self/exe", exe, sizeof(exe) - 1);
+    std::string dir = len > 0 ? std::string(exe, size_t(len)) : std::string();
+    const size_t slash = dir.find_last_of('/');
+    dir = slash == std::string::npos ? std::string(".") : dir.substr(0, slash);
+    *where = dir + "/" GH2GAME_MODULE_FILE;
+  }
   void* module = dlopen(where->c_str(), RTLD_NOW | RTLD_LOCAL);
   if (!module) Fail(*where + ": " + dlerror());
   auto open = reinterpret_cast<Gh2GameOpenFunc>(dlsym(module, GH2GAME_OPEN_SYMBOL));

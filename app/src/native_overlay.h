@@ -20,6 +20,8 @@ void Gh2NativeOverlayStart(rex::ui::ImGuiDrawer* drawer, rex::ui::WindowedAppCon
 void Gh2ApplyRenderOptions();
 // The window changed size: with render_resolution=auto the renderer follows, a moment after the resizing stops. Any thread.
 void Gh2RenderOptionsWindowChanged();
+// The launcher (no game, so no swaps to follow): draws one frame of the dialogs into the renderer's overlay now (UI thread).
+void Gh2NativeOverlayTick(rex::ui::ImGuiDrawer* drawer, uint32_t width, uint32_t height);
 // Shutdown: the renderer stops asking for menu frames.
 void Gh2NativeOverlayStop();
 // The screenshot key (F9, registered by the menu): saves the next picture, as the game draws it, to ~/gh2_shots.

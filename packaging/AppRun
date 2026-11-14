@@ -23,7 +23,13 @@ export PYTHONHOME="$here/usr/python"
 export PYTHONPATH="$here/usr/app/scripts"
 export TCL_LIBRARY="$here/usr/python/lib/tcl8.6" TK_LIBRARY="$here/usr/python/lib/tk8.6"
 py="$here/usr/python/bin/python3"
-if [ $# -eq 0 ]; then
+# No arguments: the launcher. The new one is a mode of the prebuilt game host (usr/host/gh2 --launcher: Vulkan, the note highway, guitar
+# navigation); `tk` (or GH2_LAUNCHER=tk, or a package without a host) opens the classic Tk launcher.
+if [ $# -eq 0 ] && [ -x "$here/usr/host/gh2" ] && [ "${GH2_LAUNCHER:-}" != "tk" ]; then
+  # its own libraries only (the bundled clang's LLVM/zstd/xml copies must not reach the system's Vulkan driver)
+  LD_LIBRARY_PATH="$here/usr/host:$here/usr/lib:$fb" exec "$here/usr/host/gh2" --launcher
+fi
+if [ $# -eq 0 ] || [ "$1" = "tk" ]; then
   exec "$py" "$here/usr/app/launcher/gh2_launcher.py"
 fi
 exec "$py" -m gh2install "$@"

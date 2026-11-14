@@ -108,7 +108,7 @@ rexglue_apply_recomp_settings(gh2_cpu "${REXGLUE_ENTRYPOINT_INCLUDE_DIR}/gh2_pch
 add_dependencies(gh2_cpu gh2_codegen)
 
 # ---- the game module (GH2_GAME_MODULE=ON, the Windows default): the generated code is not linked into the executable but built as
-# gh2game.dll with llvm-mingw (native/tools/build_game_module.py), which the host loads at start (native/rt/module, gh2module/game_module.h).
+# gh2game.dll with llvm-mingw (Windows) or libgh2game.so with this build's clang (Linux) (native/tools/build_game_module.py), which the host loads at start (native/rt/module, gh2module/game_module.h).
 #   overrides.txt              the game functions the hooks replace: every sub_X / xstart the hooks' objects define (also what the module needs)
 #   gh2host_stubs.gen.cpp      the host's tables (imports, hooks) and its __imp__sub_X stubs onto the module's original code
 #   gh2game                    the module itself, next to the executable
@@ -132,19 +132,33 @@ if(GH2_GAME_MODULE)
     target_include_directories(gh2rt_module_host PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/rt/module/include")
     target_link_libraries(gh2rt_module_host PRIVATE gh2abi_headers gh2_cpu_flags)
 
-    set(GH2_LLVM_MINGW "$ENV{GH2_LLVM_MINGW}" CACHE PATH "llvm-mingw (the directory with bin/clang++.exe) that builds the game module")
-    if(NOT EXISTS "${GH2_LLVM_MINGW}/bin/clang++.exe")
-        message(FATAL_ERROR "GH2_GAME_MODULE needs llvm-mingw: set GH2_LLVM_MINGW (now '${GH2_LLVM_MINGW}')")
+    if(WIN32)
+        set(GH2_LLVM_MINGW "$ENV{GH2_LLVM_MINGW}" CACHE PATH "llvm-mingw (the directory with bin/clang++.exe) that builds the game module")
+        if(NOT EXISTS "${GH2_LLVM_MINGW}/bin/clang++.exe")
+            message(FATAL_ERROR "GH2_GAME_MODULE needs llvm-mingw: set GH2_LLVM_MINGW (now '${GH2_LLVM_MINGW}')")
+        endif()
+        set(GH2_MODULE_TOOLCHAIN_ARGS --os windows --toolchain "${GH2_LLVM_MINGW}")
+        set(GH2_MODULE_FILE gh2game.dll)
+    else()
+        # the compiler of this build (and the sysroot of a toolchain file, as the AppImage's bundled one)
+        set(_mflags "")
+        if(CMAKE_SYSROOT)
+            string(APPEND _mflags " --sysroot=${CMAKE_SYSROOT}")
+        endif()
+        string(APPEND _mflags " ${CMAKE_CXX_FLAGS_INIT}")
+        string(STRIP "${_mflags}" _mflags)
+        set(GH2_MODULE_TOOLCHAIN_ARGS --os linux --cxx "${CMAKE_CXX_COMPILER}" "--cflags=${_mflags}")
+        set(GH2_MODULE_FILE libgh2game.so)
     endif()
     # (always run: the module's own Ninja knows what is out of date and does nothing when nothing is)
     add_custom_target(gh2game ALL
         COMMAND Python3::Interpreter "${CMAKE_CURRENT_SOURCE_DIR}/tools/build_game_module.py"
                 --generated "${REXGLUE_ENTRYPOINT_INCLUDE_DIR}" --native "${CMAKE_CURRENT_SOURCE_DIR}" --simde "${GH2_SIMDE_ONLY_DIR}"
-                --overrides "${GH2_MODULE_DIR}/overrides.txt" --toolchain "${GH2_LLVM_MINGW}" --ninja "${CMAKE_MAKE_PROGRAM}"
-                --build "${GH2_MODULE_DIR}/game" --out "${CMAKE_BINARY_DIR}/gh2game.dll"
+                --overrides "${GH2_MODULE_DIR}/overrides.txt" ${GH2_MODULE_TOOLCHAIN_ARGS} --ninja "${CMAKE_MAKE_PROGRAM}"
+                --build "${GH2_MODULE_DIR}/game" --out "${CMAKE_BINARY_DIR}/${GH2_MODULE_FILE}"
         DEPENDS "${GH2_MODULE_DIR}/overrides.txt"
-        BYPRODUCTS "${CMAKE_BINARY_DIR}/gh2game.dll"
-        COMMENT "Building the game module (llvm-mingw)"
+        BYPRODUCTS "${CMAKE_BINARY_DIR}/${GH2_MODULE_FILE}"
+        COMMENT "Building the game module (${GH2_MODULE_FILE})"
         USES_TERMINAL VERBATIM)
     add_dependencies(gh2game gh2_codegen)
 endif()

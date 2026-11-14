@@ -1,5 +1,5 @@
 // The game module's side of the handshake (gh2module/game_module.h): compiled into gh2game.dll together with the generated game code and
-// the generated stubs (gh2game_stubs.gen.cpp, native/tools/gen_module_stubs.py). Shim headers only; built with llvm-mingw on Windows.
+// the generated stubs (gh2game_stubs.gen.cpp, native/tools/gen_module_stubs.py). Shim headers only; built with llvm-mingw on Windows, with the bundled clang as libgh2game.so on Linux.
 //
 // The generated code calls the runtime through the C functions of gh2abi/abi.h (gh2_resolve_indirect, ...) and the kernel through
 // `__imp__<Name>`: here the first are forwarded to the host's services, the second (in the stubs) jump through the host's import table.
@@ -39,7 +39,7 @@ extern "C" bool gh2_mmio_store(uint32_t guest_address, uint32_t value) { return 
 extern "C" void gh2_log(int level, const char* text, size_t length) { g_host.log(level, text, length); }
 extern "C" void gh2_spin_hint() { g_host.spin_hint(); }
 
-extern "C" __declspec(dllexport) const Gh2GameModule* gh2game_open(const Gh2HostTable* host) {
+extern "C" GH2GAME_EXPORT const Gh2GameModule* gh2game_open(const Gh2HostTable* host) {
   g_module.abi_version = GH2GAME_ABI_VERSION;
   g_module.struct_size = sizeof(Gh2GameModule);
   g_module.context_layout = gh2module::ContextLayout();

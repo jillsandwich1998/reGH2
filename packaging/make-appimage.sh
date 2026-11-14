@@ -8,8 +8,23 @@ repo="$1"; out="$2"
 app="$out/AppDir"
 rm -rf "$app" && mkdir -p "$app/usr"/{bin,lib,python,sdk,toolchain/bin,sysroot,app}
 
-echo "== SDK"
-cp -a "$out/sdk/linux-amd64" "$app/usr/sdk/"
+# With a prebuilt host (packaging/make-host.sh -> $out/host) the player's PC only translates default.xex (rexglue) and compiles the game
+# module: the SDK's headers, CMake files and static libraries stay out, and so does CMake. Without it: the whole SDK and CMake (full build).
+host=0
+if [ -f "$out/host/host.json" ] && [ -x "$out/host/gh2" ]; then host=1; fi
+echo "== SDK (prebuilt host: $host)"
+if [ "$host" = 1 ]; then
+  s="$out/sdk/linux-amd64"; d="$app/usr/sdk/linux-amd64"
+  mkdir -p "$d/bin" "$d/lib" "$d/include" "$d/share"
+  cp -a "$s/bin/rexglue" "$d/bin/"
+  cp -a "$s/lib/librexruntime.so" "$s/lib/librexgpu-xenos.so" "$d/lib/"
+  cp -a "$s/include/simde" "$d/include/"
+  cp -a "$s/share/rexglue" "$d/share/"
+  echo "== prebuilt host"
+  cp -a "$out/host" "$app/usr/host"
+else
+  cp -a "$out/sdk/linux-amd64" "$app/usr/sdk/"
+fi
 
 echo "== our sources"
 for d in scripts launcher app sdk-patches; do cp -a "$repo/$d" "$app/usr/app/"; done
@@ -77,11 +92,13 @@ for so in libX11.so.6 libX11-xcb.so.1 libxcb.so.1 libwayland-client.so.0 libvulk
 done
 ls "$app/usr/fallback"
 
-echo "== CMake + Ninja"
+echo "== Ninja (+ CMake without a prebuilt host)"
 cd "$out"
-curl -sL -o cmake.tgz https://github.com/Kitware/CMake/releases/download/v3.31.6/cmake-3.31.6-linux-x86_64.tar.gz
-tar -xzf cmake.tgz -C "$app/usr" && mv "$app/usr/cmake-3.31.6-linux-x86_64" "$app/usr/cmake"
-rm -rf "$app/usr/cmake/doc" "$app/usr/cmake/man"
+if [ "$host" = 0 ]; then
+  curl -sL -o cmake.tgz https://github.com/Kitware/CMake/releases/download/v3.31.6/cmake-3.31.6-linux-x86_64.tar.gz
+  tar -xzf cmake.tgz -C "$app/usr" && mv "$app/usr/cmake-3.31.6-linux-x86_64" "$app/usr/cmake"
+  rm -rf "$app/usr/cmake/doc" "$app/usr/cmake/man"
+fi
 curl -sL -o ninja.zip https://github.com/ninja-build/ninja/releases/download/v1.12.1/ninja-linux.zip
 unzip -qo ninja.zip -d "$app/usr/toolchain/bin" && chmod +x "$app/usr/toolchain/bin/ninja"
 

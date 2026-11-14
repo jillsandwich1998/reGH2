@@ -31,6 +31,7 @@ def main(argv=None):
     p.add_argument("--no-desktop-icon", action="store_true", help="do not put an icon on the desktop (the app menu entry is always made)")
     p.add_argument("--rebuild", action="store_true", help="rebuild even if this game is already installed and up to date")
     p.add_argument("--force", action="store_true", help="continue even if default.xex is an unknown version")
+    p.add_argument("--full", action="store_true", help="build the host too (CMake), not only the game module (development, packaging)")
     sub.add_parser("status", help="show what is installed")
     sub.add_parser("launch", help="start the game (extra options are passed to it, e.g. --startup_mode=menu)")
     p = sub.add_parser("shortcut", help="create or remove the app menu entry and desktop icon")
@@ -45,13 +46,17 @@ def main(argv=None):
     sub.add_parser("doctor", help="check the system for a Vulkan driver and offer to install it")
     p = sub.add_parser("update", help="look for a newer reGH2 on GitHub; with --apply, download it and replace this AppImage")
     p.add_argument("--apply", action="store_true", help="download the newer version (checked against its SHA256SUMS.txt) and replace this AppImage")
+    p = sub.add_parser("make-host", help="(packaging) after `install --full`: stage the prebuilt host (gh2 and what it loads, without the game) in a folder")
+    p.add_argument("--out", required=True, help="the folder to stage the host in (the AppImage ships it as usr/host)")
     sub.add_parser("version")
     a, extra = ap.parse_known_args(argv)  # for `launch`, unknown options go to the game
-    inst = Installer(a.prefix, a.sdk, a.cxx, a.toolchain_file, force=getattr(a, "force", False), desktop_icon=not getattr(a, "no_desktop_icon", False),
+    inst = Installer(a.prefix, a.sdk, a.cxx, a.toolchain_file, force=getattr(a, "force", False), desktop_icon=not getattr(a, "no_desktop_icon", False), full=getattr(a, "full", False) or a.cmd == "make-host",
                      progress=lambda f, t: print("[%3d%%] %s" % (f * 100, t), flush=True) if t else None)
     try:
         if a.cmd == "install":
             inst.install(a.source, rebuild=a.rebuild)
+        elif a.cmd == "make-host":
+            inst.stage_host(os.path.abspath(a.out))
         elif a.cmd == "status":
             print(inst.status() or "not installed")
         elif a.cmd == "shortcut":

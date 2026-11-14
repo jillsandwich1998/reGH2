@@ -75,8 +75,10 @@ bool Renderer::Impl::InitVulkan() {
     }
   }
   std::string cache_error;
-  shader_cache = gh2gfx::ShaderCache::Open(config.shader_cache_dir, &cache_error);
-  if (!shader_cache) std::fprintf(stderr, "RENDER shader cache: %s (nothing can be drawn)\n", cache_error.c_str());
+  if (!config.overlay_only) {
+    shader_cache = gh2gfx::ShaderCache::Open(config.shader_cache_dir, &cache_error);
+    if (!shader_cache) std::fprintf(stderr, "RENDER shader cache: %s (nothing can be drawn)\n", cache_error.c_str());
+  }
   if (!InitDeviceObjects()) {
     vk_failed = true;
     return false;
@@ -821,5 +823,13 @@ void Renderer::OnSwap(const uint32_t* regs, uint32_t front, uint32_t width, uint
 }
 
 void Renderer::OnIdle() {}
+
+bool Renderer::PresentOverlay() {
+  Impl& s = *impl_;
+  ++s.frame;
+  if (!s.BeginFrame()) return false;
+  s.SubmitFrame(true, nullptr);
+  return true;
+}
 
 }  // namespace gh2render

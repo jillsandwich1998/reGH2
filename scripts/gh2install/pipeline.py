@@ -20,6 +20,54 @@ KNOWN_XEX = {
 }
 
 
+# The prebuilt host (gh2 and what it loads, without the game code): the AppImage's usr/host, else GH2_HOST_DIR (a folder made by
+# `gh2-recomp make-host`). With it the player's PC only translates default.xex and compiles the game module, libgh2game.so.
+HOST_META = "host.json"           # what the host was built from (version, contract, the xex, the hashes of the boundary lists)
+HOST_OVERRIDES = "overrides.txt"  # the game functions its hooks replace: the game module is generated from this list
+HOST_FILES = ("gh2", "librexgpu-xenos.so", "librexruntime.so")
+MODULE_FILE = "libgh2game.so"
+
+
+def host_dir():
+    appdir = os.environ.get("APPDIR")
+    for cand in ((os.path.join(appdir, "usr", "host") if appdir else None), os.environ.get("GH2_HOST_DIR")):
+        if cand and all(os.path.exists(os.path.join(cand, f)) for f in ("gh2", HOST_META, HOST_OVERRIDES)):
+            return cand
+    return None
+
+
+def read_host_meta(folder):
+    try:
+        with open(os.path.join(folder, HOST_META), encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+def module_tools():
+    """native/tools as an importable directory (gen_module_stubs: the list hashes of the boundary)."""
+    tools = os.path.join(repo_root(), "native", "tools")
+    if tools not in sys.path:
+        sys.path.insert(0, tools)
+    import gen_module_stubs  # noqa: E402
+    return gen_module_stubs
+
+
+def contract_version():
+    with open(os.path.join(repo_root(), "native", "rt", "module", "include", "gh2module", "game_module.h"), encoding="utf-8") as f:
+        m = re.search(r"#define GH2GAME_ABI_VERSION (\d+)u", f.read())
+    return int(m.group(1)) if m else None
+
+
+def _native_ignore(directory, names):
+    """What of native/ is not part of the game's sources: caches, golden traces, and a developer's XenosRecomp clone and its build tree
+    (hundreds of MB; the AppImage leaves them out too, so the fingerprint is the same in both)."""
+    skip = {"__pycache__", "golden"}
+    if os.path.basename(directory) == "third_party":
+        skip |= {"XenosRecomp", "build"}
+    return [n for n in names if n in skip]
+
+
 class InstallError(Exception):
     pass
 
@@ -140,7 +188,7 @@ def host_libs():
 
 class Installer:
     def __init__(self, prefix=None, sdk=None, cxx=None, toolchain_file=None, log=print, progress=None, force=False,
-                 desktop_icon=True):
+                 desktop_icon=True, full=False):
         self.prefix = os.path.abspath(prefix or default_prefix())
         self.sdk = os.path.abspath(sdk or os.environ.get("GH2_SDK") or os.path.join(repo_root(), "sdk"))
         self.cxx = cxx or os.environ.get("GH2_CXX") or "clang++"
@@ -150,6 +198,7 @@ class Installer:
         self.force = force
         self.desktop_icon = desktop_icon
         self.app_dir = os.path.join(repo_root(), "app")
+        self.host = None if full else host_dir()   # None: a full build (CMake) of the host and the module
 
     # ---- helpers ------------------------------------------------------------------------------------------------
     def env(self):
@@ -166,7 +215,7 @@ class Installer:
         app = os.path.join(self.prefix, "app")
         lib = os.path.join(app, "lib")
         os.makedirs(lib, exist_ok=True)
-        rt = os.path.join(self.sdk_prefix(), "lib", "librexruntime.so")
+        rt = os.path.join(self.host, "librexruntime.so") if self.host else os.path.join(self.sdk_prefix(), "lib", "librexruntime.so")   # the host's own build of it
         if os.path.exists(rt):
             replace_file(rt, os.path.join(lib, "librexruntime.so"))
         appdir = os.environ.get("APPDIR")
@@ -492,7 +541,8 @@ class Installer:
         h = hashlib.sha1()
         for root in (self.app_dir, os.path.join(repo_root(), "sdk-patches"), os.path.join(repo_root(), "native")):
             for dirpath, dirnames, filenames in os.walk(root):
-                dirnames[:] = sorted(d for d in dirnames if d != "__pycache__")
+                skip = _native_ignore(dirpath, dirnames)
+                dirnames[:] = sorted(d for d in dirnames if d not in skip)
                 for name in sorted(filenames):
                     if name.endswith(".pyc"):
                         continue
@@ -529,6 +579,8 @@ class Installer:
         meta = self.status()
         if not meta or not os.path.exists(os.path.join(self.prefix, "app", "gh2")):
             return "none"
+        if not os.path.exists(os.path.join(self.prefix, "app", MODULE_FILE)):
+            return "outdated"   # built before the game became a module (the code was linked into gh2): rebuild
         if self.source_xex_sha1(source) != meta.get("xex_sha1"):
             return "other"
         return "current" if meta.get("fingerprint") == self.fingerprint() else "outdated"
@@ -566,8 +618,7 @@ class Installer:
                 shutil.rmtree(dst)
             shutil.copytree(os.path.join(self.app_dir, item), dst)
         # native/: hooks, boundary tracer and the shim that isolates the generated code (CMakeLists.txt adds it as a subdirectory)
-        shutil.copytree(os.path.join(repo_root(), "native"), os.path.join(build_dir, "native"),
-                        ignore=shutil.ignore_patterns("__pycache__", "golden"))
+        shutil.copytree(os.path.join(repo_root(), "native"), os.path.join(build_dir, "native"), ignore=_native_ignore)
         shutil.copy(os.path.join(self.app_dir, "CMakeLists.txt"), os.path.join(build_dir, "CMakeLists.txt"))
         text = open(os.path.join(self.app_dir, "gh2_manifest.toml.in")).read()
         text = text.replace("@GAME_ROOT@", game_dir).replace("@XEX_PATH@", xex)
@@ -605,15 +656,17 @@ class Installer:
         appdir = os.environ.get("APPDIR")
         return {"compiler": self.cxx, "compiler_version": first_line([self.cxx, "--version"]),
                 "bundled_toolchain": bool(appdir and self.cxx.startswith(appdir)),
-                "cmake": first_line(["cmake", "--version"]),
-                "options": "Release, -O2 -DNDEBUG, CMake toolchain file: %s" % (self.toolchain_file or "none"),
+                "cmake": None if self.host else first_line(["cmake", "--version"]),
+                "options": ("game module only (prebuilt host %s), native/tools/build_game_module.py" % read_host_meta(self.host).get("version", "?")) if self.host else
+                           "Release, -O2 -DNDEBUG, CMake toolchain file: %s" % (self.toolchain_file or "none"),
                 "parallel_jobs": getattr(self, "last_jobs", None)}
 
     def build(self, build_dir):
         out = os.path.join(build_dir, "out")
         cfg = ["cmake", "-S", build_dir, "-B", out, "-G", "Ninja", "-DCMAKE_BUILD_TYPE=Release",
                "-DCMAKE_CXX_COMPILER=" + self.cxx, "-DCMAKE_CXX_FLAGS_RELEASE=-O2 -DNDEBUG",
-               "-DCMAKE_PREFIX_PATH=" + self.sdk_prefix()]
+               "-DCMAKE_PREFIX_PATH=" + self.sdk_prefix(), "-DGH2_GAME_MODULE=ON",
+               "-DPython3_EXECUTABLE=" + sys.executable]   # the module's build steps run with this Python (inside the AppImage: its own, not the host's)
         if self.toolchain_file:
             cfg.append("-DCMAKE_TOOLCHAIN_FILE=" + self.toolchain_file)
         self.progress(0.42, "Configuring the build")
@@ -631,6 +684,75 @@ class Installer:
 
         self.run(["cmake", "--build", out, "-j", str(jobs)], on_line=on_line)
         return out
+
+    def module_cflags(self):
+        """The bundled clang compiles against the AppImage's sysroot (glibc 2.35, libstdc++ 13), like its CMake toolchain file."""
+        appdir = os.environ.get("APPDIR")
+        if not (appdir and self.cxx.startswith(appdir)):
+            return ""
+        sysroot = os.path.join(appdir, "usr", "sysroot")
+        gcc = os.path.join(sysroot, "usr", "lib", "gcc", "x86_64-linux-gnu", "13")
+        return "--sysroot=%s --gcc-install-dir=%s -stdlib=libstdc++" % (sysroot, gcc)
+
+    def build_module(self, build_dir):
+        """Only the generated game code, as libgh2game.so (native/tools/build_game_module.py writes the Ninja file; no CMake). Returns the folder."""
+        out = os.path.join(build_dir, "module", "out")
+        simde = os.path.join(build_dir, "simde_only")   # simde alone: the generated code must not see the other SDK headers
+        if not os.path.exists(os.path.join(simde, "simde", "x86", "sse4.1.h")):
+            shutil.rmtree(simde, ignore_errors=True)
+            shutil.copytree(os.path.join(self.sdk_prefix(), "include", "simde"), os.path.join(simde, "simde"))
+        ninja = shutil.which("ninja")
+        if not ninja:
+            raise InstallError("ninja not found (the AppImage brings it; from the sources install ninja)")
+        jobs = job_count()
+        self.last_jobs = jobs
+        self.log("building the game module with %d parallel jobs" % jobs)
+        self.progress(0.42, "Preparing the build")
+        step = re.compile(r"^\[(\d+)/(\d+)\]")
+
+        def on_line(line):
+            m = step.match(line)
+            if m:
+                a, b = int(m.group(1)), int(m.group(2))
+                self.progress(0.45 + 0.5 * a / max(1, b), "Compiling %d/%d" % (a, b))
+
+        self.run([sys.executable, "-I", os.path.join(repo_root(), "native", "tools", "build_game_module.py"), "--os", "linux",
+                  "--generated", os.path.join(build_dir, "generated", "default"), "--native", os.path.join(repo_root(), "native"),
+                  "--simde", simde, "--overrides", os.path.join(self.host, HOST_OVERRIDES), "--cxx", self.cxx,
+                  "--cflags=" + self.module_cflags(), "--ninja", ninja, "--build", os.path.join(build_dir, "module"),
+                  "--out", os.path.join(out, MODULE_FILE), "-j", str(jobs)], on_line=on_line)
+        if not os.path.exists(os.path.join(out, MODULE_FILE)):
+            raise InstallError("the game module was not built (see the log)")
+        return out
+
+    def stage_host(self, dest):
+        """Copies the host of a full build (gh2 and what it loads, not the game module) into `dest` with the override list and host.json:
+        the folder the AppImage ships as usr/host (packaging/make-host.sh). Needs a finished full build of these sources in this prefix."""
+        if self.host:
+            raise InstallError("make-host needs a full build (Installer(full=True))")
+        out = os.path.join(self.prefix, "build", "out")
+        overrides = os.path.join(out, "native", "module", HOST_OVERRIDES)
+        if not (os.path.exists(os.path.join(out, "gh2")) and os.path.exists(overrides)):
+            raise InstallError("no full build with the game module in %s: run `install --full` first" % out)
+        meta = self.status() or {}
+        if meta.get("fingerprint") != self.fingerprint():   # the host must come from exactly these sources (its hooks define the module's boundary)
+            raise InstallError("the full build in %s is older than these sources: run `install --full --rebuild` first" % self.prefix)
+        shutil.rmtree(dest, ignore_errors=True)
+        os.makedirs(dest)
+        for src in (os.path.join(out, "gh2"), os.path.join(out, "librexgpu-xenos.so"), os.path.join(self.sdk_prefix(), "lib", "librexruntime.so")):
+            if os.path.exists(src):
+                shutil.copy2(src, dest)
+        shutil.copy2(overrides, os.path.join(dest, HOST_OVERRIDES))
+        stubs = module_tools()
+        names = stubs.read_list(overrides)
+        imports = stubs.read_list(os.path.join(repo_root(), "native", "rt", "abi", "contract", "imports.txt"))
+        host = {"version": __version__, "built": time.strftime("%Y-%m-%d %H:%M:%S"), "contract": contract_version(), "xex_sha1": meta.get("xex_sha1"),
+                "imports": len(imports), "imports_hash": "%016X" % stubs.fnv1a(imports), "overrides": len(names), "overrides_hash": "%016X" % stubs.fnv1a(names),
+                "fingerprint": meta.get("fingerprint")}
+        with open(os.path.join(dest, HOST_META), "w", encoding="utf-8") as f:
+            json.dump(host, f, indent=1)
+        self.log("host staged in %s: %d files, %d overrides, contract %s" % (dest, len(os.listdir(dest)), len(names), host["contract"]))
+        return dest
 
     def install(self, source, rebuild=False):
         t0 = time.time()
@@ -652,14 +774,25 @@ class Installer:
         game_dir = self.locate_game(source)
         xex = find_xex(game_dir)
         digest = self.check_xex(xex)
+        if self.host:
+            made_for = read_host_meta(self.host).get("xex_sha1")
+            if made_for and made_for != digest:   # the hooks name game functions by address: they fit the default.xex they were made with
+                raise InstallError("the prebuilt game host fits default.xex %s, this one is %s: another default.xex needs a full build from "
+                                   "the sources (install --full)" % (made_for, digest))
         build_dir = os.path.join(self.prefix, "build")
         self.prepare_project(build_dir, game_dir, xex)
         self.codegen(build_dir)
-        out = self.build(build_dir)
+        if self.host:
+            out = self.build_module(build_dir)
+            files = [(os.path.join(self.host, f), f) for f in HOST_FILES if f != "librexruntime.so"] + [(os.path.join(out, MODULE_FILE), MODULE_FILE)]
+        else:
+            out = self.build(build_dir)
+            files = [(os.path.join(out, f), f) for f in ("gh2", "librexgpu-xenos.so", MODULE_FILE)]
         app = os.path.join(self.prefix, "app")
         os.makedirs(app, exist_ok=True)
-        for f in ("gh2", "librexgpu-xenos.so"):
-            replace_file(os.path.join(out, f), os.path.join(app, f))
+        for src, name in files:
+            if os.path.exists(src):
+                replace_file(src, os.path.join(app, name))
         self.ensure_runtime()
         meta = {"version": __version__, "game_dir": game_dir, "xex_sha1": digest, "sdk": self.sdk,
                 "fingerprint": self.fingerprint(), "installed": time.strftime("%Y-%m-%d %H:%M:%S"), "seconds": round(time.time() - t0),

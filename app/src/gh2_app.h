@@ -9,6 +9,7 @@
 #include <rex/rex_app.h>
 #include <rex/system/gpu_plugin.h>
 
+#include "launcher.h"
 #include "native_overlay.h"
 #include "shader_bootstrap.h"
 #include "native_window.h"
@@ -51,6 +52,7 @@ class Gh2App : public rex::ReXApp {
 
   static std::unique_ptr<rex::ui::WindowedApp> Create(
       rex::ui::WindowedAppContext& ctx) {
+    if (Gh2LauncherRequested()) return Gh2CreateLauncherApp(ctx);   // the launcher: no game code needed (it can install it)
 #ifdef GH2_GAME_MODULE
     // the game code is the module gh2game.dll: load it and complete the handshake first (on failure it tells the player and exits)
     const auto& image = *static_cast<const rex::PPCImageInfo*>(gh2module::OpenGameModule());

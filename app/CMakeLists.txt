@@ -20,7 +20,7 @@ option(GH2_ISOLATED_CPU "Compile the generated code against the gh2abi shim inst
 if(WIN32)
     option(GH2_GAME_MODULE "Build the generated game code as gh2game.dll with llvm-mingw (needs GH2_ISOLATED_CPU)" ON)
 else()
-    option(GH2_GAME_MODULE "Build the generated game code as a separate module (Windows only for now)" OFF)
+    option(GH2_GAME_MODULE "Build the generated game code as a separate module, libgh2game.so (lets the host be prebuilt)" OFF)
 endif()
 if(GH2_GAME_MODULE AND NOT GH2_ISOLATED_CPU)
     message(FATAL_ERROR "GH2_GAME_MODULE needs GH2_ISOLATED_CPU=ON")
@@ -40,6 +40,7 @@ set(GH2_SOURCES
     src/native_audio.cpp
     src/native_window.cpp
     src/native_overlay.cpp
+    src/launcher.cpp
     src/menu_pad.cpp
     src/shader_bootstrap.cpp
     src/fps_meter.cpp

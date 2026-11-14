@@ -56,11 +56,13 @@ compiled with a compiler that comes inside the AppImage.
 ## Using it (AppImage)
 
 1. Download `reGH2-x86_64.AppImage`, `chmod +x` it, run it.
-2. Press **Select folder...** and choose the folder that holds your game (the disc image, the extracted game, or the folder with `default.xex`; it is searched for inside), then **Install** (a few minutes: the game is compiled here).
+2. Press **SET UP**, then **Choose folder** (or **Choose .iso or .xex**, or drag the game onto the window): the disc image, the extracted game, or the folder with `default.xex`. Press **Build now** (one to two minutes: the game's code is compiled here).
 3. Press **PLAY**. The first start also translates the game's shaders for your graphics card (about 15 seconds, once, with a progress window; nothing is downloaded). In the game press **F2** for the options and to **Quit game** (it asks for confirmation).
 
 Nothing else has to be installed or downloaded: the AppImage carries the compiler, the C++ runtime, the shader tools, Python and the
 libraries it needs. The one thing it cannot carry is the Vulkan *driver* for your graphics card (see Requirements).
+
+The launcher works with the mouse, the keyboard (arrows, Enter, Esc), a gamepad or the guitar (strum moves, green chooses, red goes back). The classic launcher is still there: `reGH2-x86_64.AppImage tk`.
 
 Command line: `reGH2-x86_64.AppImage install <iso|folder|default.xex>`, `... launch [game options]`, `... status`, `... doctor`, `... report`, `... saves`, `... uninstall`, `... update`.
 

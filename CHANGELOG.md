@@ -8,6 +8,16 @@
 * Windows game module: with `GH2_GAME_MODULE` (on by default on Windows) the generated game code is built as `gh2game.dll` with llvm-mingw (clang, lld, libc++ and mingw-w64, all redistributable) and loaded by `gh2.exe` at start. Only plain C crosses between the two: the runtime services, the 179 kernel imports, the 916 game functions the hooks replace and their original code, checked by a handshake (contract version, `PPCContext` layout, the hash of both lists). See `native/rt/module`, `native/tools/gen_module_stubs.py` and `native/tools/build_game_module.py`. Linux is unchanged (the option is off there).
 * SDK patches 0012 (an exported setter for the runtime's current thread) and 0013 (one shared SDL3 library) for the Windows build; they apply on Linux too.
 * `.gitattributes`: patches and shell scripts stay LF in Windows checkouts.
+* New launcher (Linux): opening the AppImage shows a stage with a scrolling note highway and the screens Home (Play, version, saves, updates,
+  problem report, rebuild), Setup (choose or drop your game copy, build), the build's progress (stages, percentage, the last log lines, Cancel)
+  and Settings (resolution, anti-aliasing, start-up, fullscreen, guitars first, FPS counter; the same file as the F2 menu). It is a mode of the
+  game host (`gh2 --launcher`): Vulkan through the native renderer, Dear ImGui, navigation by mouse, keyboard, gamepad or guitar (strum moves,
+  green chooses, red goes back). Fonts: New Rocker and Barlow Condensed (SIL OFL 1.1). The classic Tk launcher stays: `reGH2-x86_64.AppImage tk`.
+* Linux game module and prebuilt host: the AppImage ships the game host already built (`usr/host`: `gh2`, its GPU plugin and the runtime;
+  `packaging/make-host.sh`), and the player's PC only translates `default.xex` and compiles the game code as `libgh2game.so` (the same
+  handshake as `gh2game.dll` on Windows; `native/tools/build_game_module.py --os linux`, no CMake). Measured on the development PC: install
+  113 s -> 78 s, 192 -> 109 compile steps; AppImage 231 -> 183 MB (CMake and most of the SDK left out). Games installed by an older version
+  are rebuilt once (Rebuild the game). `install --full` keeps the whole CMake build (development, packaging).
 
 **Fixed**
 * Linux: stutter when a menu screen loads (frames of up to 0.15 s). Every guest allocation that committed memory inside an existing reservation made the runtime read and parse all of /proc/self/maps to check the range; SDK patch 0014 checks it one mapping at a time with the PROCMAP_QUERY lookup (or the protection table on kernels older than 6.11). Measured on the autostart run: longest menu frame 151-159 ms -> 46-56 ms, the 61 ms frame at the start of the song is gone. Windows was never affected.

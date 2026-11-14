@@ -14,5 +14,7 @@ namespace gh2rt::gpu {
 void SetPresentCallback(std::function<void(uint32_t width, uint32_t height)> callback);
 // The renderer once --gpu=native has created it, else null.
 gh2render::Renderer* ActiveRenderer();
+// The launcher (no game): it creates an overlay-only renderer itself; from then on ActiveRenderer() is that one (the menu's drawer uploads its textures there).
+void AdoptOverlayRenderer(std::unique_ptr<gh2render::Renderer> renderer);
 
 }  // namespace gh2rt::gpu

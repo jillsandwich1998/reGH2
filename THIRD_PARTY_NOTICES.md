@@ -24,10 +24,13 @@ This project contains no game data and no code generated from the game. It build
   The AppImage does carry a **built copy of the patched XenosRecomp** together with `libdxcompiler.so` / `libdxil.so` (DirectXShaderCompiler, Microsoft, LLVM license with
   exceptions: Apache-2.0 with LLVM exceptions / University of Illinois, see that project) and the C++ runtime it was built with, in `usr/app/shader-tools`
   (`packaging/build-shader-tools.sh`): the game runs them on the player's machine, once, to translate the shaders of the player's own copy of the game. No shader of the game is distributed.
+* **New Rocker** (Pablo Impallari, Brenda Gallo, Rodrigo Fuenzalida) and **Barlow Condensed** (The Barlow Project Authors), both SIL Open Font
+  License 1.1: the launcher's fonts, built into the game host from `app/src/launcher_fonts/` (their licence texts are next to them).
 * **Mackiloha / ArkHelper** (MIT): the public description of the Harmonix ARK format that `native/tools/ark_extract.py` was written from (the tool
   is a reimplementation; no code was copied). The tool only runs on the player's own game files.
 
-The AppImage additionally bundles clang/LLVM 20 (Apache-2.0 with LLVM exceptions), CMake (BSD-3-Clause), Ninja (Apache-2.0),
+The AppImage additionally bundles the prebuilt game host (`usr/host`: `gh2` with the components listed above, `librexgpu-xenos.so`, `librexruntime.so`; nothing
+derived from the game: the hooks only name game functions by address), clang/LLVM 20 (Apache-2.0 with LLVM exceptions), Ninja (Apache-2.0), CMake (BSD-3-Clause; only in a package built without a prebuilt host),
 glibc / libstdc++ runtime headers and libraries (LGPL / GPL with runtime exception) and a portable CPython with Tk (PSF license).
 
 The Windows installer (`Setup.exe`, `packaging/windows/`) bundles, for the same purpose (compiling the player's own copy of the game on the player's machine):

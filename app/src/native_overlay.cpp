@@ -151,6 +151,10 @@ void Gh2NativeOverlayStart(rex::ui::ImGuiDrawer* drawer, rex::ui::WindowedAppCon
   });
 }
 
+void Gh2NativeOverlayTick(rex::ui::ImGuiDrawer* drawer, uint32_t width, uint32_t height) {
+  if (g_overlay && drawer) g_overlay->Tick(drawer, width, height);
+}
+
 void Gh2ApplyRenderOptions() {
   auto* renderer = gh2rt::gpu::ActiveRenderer();
   if (!renderer) return;
